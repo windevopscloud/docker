@@ -13,6 +13,15 @@ spec:
         app: backend
     spec:
       serviceAccountName: backend-sa  # RBAC applied
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: backend
       containers:
         - name: backend
           image: python:3.10-slim
@@ -40,6 +49,9 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: password
+          envFrom:
+            - configMapRef:
+                name: app-config
           volumeMounts:
             - name: code
               mountPath: /app

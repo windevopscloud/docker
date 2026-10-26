@@ -4,8 +4,8 @@ metadata:
   name: backend-code
 data:
   app.py: |
-    import os, json, psycopg2
-    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import os, json, time, psycopg2
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     def db():
         return psycopg2.connect(host=os.environ["DB_HOST"], user="postgres",
@@ -16,6 +16,11 @@ data:
         def do_GET(self):
             if self.path == "/health":
                 code, body = 200, {"status": "ok"}
+            elif self.path == "/cpu":
+                end = time.time() + 0.1          # burn ~100ms of CPU
+                while time.time() < end:
+                    pass
+                code, body = 200, {"burned_ms": 100}
             else:
                 try:
                     conn = db(); cur = conn.cursor()
@@ -24,7 +29,8 @@ data:
                     cur.execute("SELECT count(*) FROM visits")
                     n = cur.fetchone()[0]
                     conn.commit(); conn.close()
-                    code, body = 200, {"visits": n, "served_by": os.uname().nodename}
+                    code, body = 200, {"visits": n, "served_by": os.uname().nodename,
+                                       "env": os.environ.get("APP_ENV", "unset")}
                 except Exception as e:
                     code, body = 500, {"error": str(e)}
             self.send_response(code)
@@ -32,4 +38,4 @@ data:
             self.end_headers()
             self.wfile.write(json.dumps(body).encode())
 
-    HTTPServer(("0.0.0.0", 5000), H).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", 5000), H).serve_forever()
