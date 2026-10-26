@@ -19,6 +19,13 @@ spec:
           command: ["python", "-m", "http.server", "5000"]
           ports:
             - containerPort: 5000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
           env:
             - name: DB_HOST
               value: postgres
