@@ -1,0 +1,69 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-service2
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-strip-service2@kubernetescrd
+spec:
+  ingressClassName: cluster-wide-ingress
+  rules:
+  - http:
+      paths:
+      - path: /service2
+        pathType: Prefix
+        backend:
+          service:
+            name: svc-service2
+            port:
+              number: 80
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-service2
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /service2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-service2
+spec:
+  selector:
+    app: app-service2
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-service2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: app-service2
+  template:
+    metadata:
+      labels:
+        app: app-service2
+    spec:
+      containers:
+      - name: service2
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'Welcome to MicroService 2' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
