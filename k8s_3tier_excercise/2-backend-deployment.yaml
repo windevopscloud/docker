@@ -16,16 +16,22 @@ spec:
       containers:
         - name: backend
           image: python:3.10-slim
-          command: ["python", "-m", "http.server", "5000"]
+          command: ["sh", "-c", "pip install --no-cache-dir psycopg2-binary && python /app/app.py"]
           ports:
             - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 5
           resources:
             requests:
               cpu: 100m
               memory: 64Mi
             limits:
               cpu: 500m
-              memory: 128Mi
+              memory: 256Mi
           env:
             - name: DB_HOST
               value: postgres
@@ -34,3 +40,10 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: password
+          volumeMounts:
+            - name: code
+              mountPath: /app
+      volumes:
+        - name: code
+          configMap:
+            name: backend-code
