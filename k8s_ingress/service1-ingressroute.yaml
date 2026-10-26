@@ -1,29 +1,29 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: service1-ingress
-  annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: default-service1-strip@kubernetescrd
-    #traefik.ingress.kubernetes.io/router.middlewares: default-service1-redirect-to-https@kubernetescrd
-spec:
-  ingressClassName: cluster-wide-ingress
-  tls:
-  - hosts:
-    - service1.192.168.111.129.nip.io
-    secretName: service1-tls-secret
-  rules:
-  - host: service1.192.168.111.129.nip.io
-    http:
-      paths:
-      - path: /service1
-        pathType: Prefix
-        backend:
-          service:
-            name: service1-svc
-            port:
-              number: 80
-
----
+#apiVersion: networking.k8s.io/v1
+#kind: Ingress
+#metadata:
+#  name: service1-ingress
+#  annotations:
+#    traefik.ingress.kubernetes.io/router.middlewares: default-service1-strip@kubernetescrd
+#    #traefik.ingress.kubernetes.io/router.middlewares: default-service1-redirect-to-https@kubernetescrd
+#spec:
+#  ingressClassName: cluster-wide-ingress
+#  tls:
+#  - hosts:
+#    - service1.192.168.111.129.nip.io
+#    secretName: service1-tls-secret
+#  rules:
+#  - host: service1.192.168.111.129.nip.io
+#    http:
+#      paths:
+#      - path: /service1
+#        pathType: Prefix
+#        backend:
+#          service:
+#            name: service1-svc
+#            port:
+#              number: 80
+#
+#---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
@@ -44,15 +44,34 @@ spec:
     scheme: https
     permanent: true
 ---
+#HTTP IngressRoute: Listens on port 80 and redirects everything to HTTPS
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
-  name: service1-ingressroute
+  name: service1-ingressroute-http
   namespace: default
 spec:
   entryPoints:
     - web
-    - websecure		# <-- Only listen on port 443 (HTTPS)
+  routes:
+  - match: Host(`service1.192.168.111.129.nip.io`) && PathPrefix(`/service1`)
+    kind: Rule
+    middlewares:
+    - name: service1-redirect-to-https
+      namespace: default
+    services:
+    - name: service1-svc
+      port: 80
+---
+#HTTPS IngressRoute: Listens on port 443, handles TLS, and proxies to backend
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: service1-ingressroute-https
+  namespace: default
+spec:
+  entryPoints:
+    - websecure
   routes:
   - match: Host(`service1.192.168.111.129.nip.io`) && PathPrefix(`/service1`)
     kind: Rule
