@@ -1,9 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress-service2
+  name: service2-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: default-strip-service2@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: default-service2-strip@kubernetescrd
 spec:
   ingressClassName: cluster-wide-ingress
   rules:
@@ -13,14 +13,14 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: svc-service2
+            name: service2-svc
             port:
               number: 80
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: strip-service2
+  name: service2-strip
   namespace: default
 spec:
   stripPrefix:
@@ -30,10 +30,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: svc-service2
+  name: service2-svc
 spec:
   selector:
-    app: app-service2
+    app: service2-app
   ports:
   - protocol: TCP
     port: 80
@@ -42,16 +42,16 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-service2
+  name: service2-app
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: app-service2
+      app: service2-app
   template:
     metadata:
       labels:
-        app: app-service2
+        app: service2-app
     spec:
       containers:
       - name: service2

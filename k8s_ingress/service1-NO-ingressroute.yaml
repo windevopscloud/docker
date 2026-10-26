@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service1-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service1-app
+  template:
+    metadata:
+      labels:
+        app: service1-app
+    spec:
+      containers:
+      - name: service1
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'Welcome to MicroService 1' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service1-svc
+spec:
+  selector:
+    app: service1-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: service1-ingress-secure
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: default-service1-strip@kubernetescrd
+spec:
+  ingressClassName: cluster-wide-ingress
+  tls:
+  - hosts:
+    - service1.192.168.111.129.nip.io
+    secretName: service1-tls-secret
+  rules:
+  - host: service1.192.168.111.129.nip.io
+    http:
+      paths:
+      - path: /service1
+        pathType: Prefix
+        backend:
+          service:
+            name: service1-svc
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: service1-ingress-http-redirect
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: http
+    traefik.ingress.kubernetes.io/router.middlewares: default-service1-redirect-to-https@kubernetescrd
+spec:
+  ingressClassName: cluster-wide-ingress
+  rules:
+  - host: 192.168.111.129.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: service1-svc
+            port:
+              number: 80
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: service1-strip
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /service1
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: service1-redirect-to-https
+  namespace: default
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+#apiVersion: traefik.containo.us/v1alpha1
+#kind: IngressRoute
+#metadata:
+#  name: service1-ingressroute
+#  namespace: default
+#spec:
+#  entryPoints:
+#    - web
+#    - websecure         # <-- Only listen on port 443 (HTTPS)
+#  routes:
+#  - match: PathPrefix(`/service1`)
+#    kind: Rule
+#    middlewares:
+#    - name: service1-strip
+#      namespace: default
+#    services:
+#    - name: service1-svc
+#      port: 80
+#  tls:
+#    secretName: service1-tls-secret

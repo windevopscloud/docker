@@ -60,6 +60,10 @@ spec:
         - --providers.kubernetescrd
         - --entrypoints.http.Address=:80
         - --entrypoints.websecure.address=:443
+        # --- ADD THESE THREE LINES FOR GLOBAL REDIRECTION ---
+        #- --entrypoints.http.redirections.entryPoint.to=websecure
+        #- --entrypoints.http.redirections.entryPoint.scheme=https
+        #- --entrypoints.http.redirections.entryPoint.permanent=true
         # you need to manually set this IP to the incoming public IP
         # that your ingress resources would use. Note it only affects
         # status and kubectl UI, and doesn't really do anything

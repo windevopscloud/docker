@@ -1,17 +1,17 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress-service1
+  name: service1-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: default-strip-service1@kubernetescrd
-    #traefik.ingress.kubernetes.io/router.middlewares: default-redirect-to-https@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: default-service1-strip@kubernetescrd
+    #traefik.ingress.kubernetes.io/router.middlewares: default-service1-redirect-to-https@kubernetescrd
 spec:
   ingressClassName: cluster-wide-ingress
   tls:
   - hosts:
     - 192.168.111.129   # Or your domain/LoadBalancer IP
     - 192.168.111.240
-    secretName: tls-secret-service1
+    secretName: service1-tls-secret
   rules:
   - http:
       paths:
@@ -19,14 +19,14 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: svc-service1
+            name: service1-svc
             port:
               number: 80
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: strip-service1
+  name: service1-strip
   namespace: default
 spec:
   stripPrefix:
@@ -36,7 +36,7 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: default-redirect-to-https
+  name: service1-redirect-to-https
   namespace: default
 spec:
   redirectScheme:
@@ -56,21 +56,21 @@ spec:
   - match: PathPrefix(`/service1`)
     kind: Rule
     middlewares:
-    - name: strip-service1
+    - name: service1-strip
       namespace: default
     services:
-    - name: svc-service1
+    - name: service1-svc
       port: 80
   tls:
-    secretName: tls-secret-service1
+    secretName: service1-tls-secret
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: svc-service1
+  name: service1-svc
 spec:
   selector:
-    app: app-service1
+    app: service1-app
   ports:
   - protocol: TCP
     port: 80
@@ -79,16 +79,16 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-service1
+  name: service1-app
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: app-service1
+      app: service1-app
   template:
     metadata:
       labels:
-        app: app-service1
+        app: service1-app
     spec:
       containers:
       - name: service1

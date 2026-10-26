@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cheddar-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cheddar-app
+  template:
+    metadata:
+      labels:
+        app: cheddar-app
+    spec:
+      containers:
+      - name: cheddar
+        image: bretfisher/cheese:cheddar
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cheddar-svc
+spec:
+  selector:
+    app: cheddar-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cheddar-strip
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /cheddar
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cheddar-ingress-secure
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Uncomment the line below if cheddar expects requests at root (/) instead of (/cheddar)
+    # traefik.ingress.kubernetes.io/router.middlewares: default-cheddar-strip@kubernetescrd
+spec:
+  ingressClassName: cluster-wide-ingress
+  tls:
+  - hosts:
+    - cheddar.192.168.111.129.nip.io
+    secretName: cheddar-tls-secret
+  rules:
+  - host: cheddar.192.168.111.129.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cheddar-svc
+            port:
+              number: 80
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cheddar-redirect-to-https
+  namespace: default
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cheddar-ingress-http-redirect
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: http
+    traefik.ingress.kubernetes.io/router.middlewares: default-cheddar-redirect-to-https@kubernetescrd
+spec:
+  ingressClassName: cluster-wide-ingress
+  rules:
+  - host: cheddar.192.168.111.129.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cheddar-svc
+            port:
+              number: 80
