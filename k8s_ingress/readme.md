@@ -1,4 +1,4 @@
-1. Implementing ingress controller using traefik.
+1. Implement ingress controller using traefik.
 kubectl apply -f ic-traefik-hn_update1.yaml
 
 This resource is configured to use hostNetwork, port 80 and 443 is bind using hostPort.
