@@ -9,11 +9,11 @@ spec:
   ingressClassName: cluster-wide-ingress
   tls:
   - hosts:
-    - 192.168.111.129   # Or your domain/LoadBalancer IP
-    - 192.168.111.240
+    - service1.192.168.111.129.nip.io
     secretName: service1-tls-secret
   rules:
-  - http:
+  - host: service1.192.168.111.129.nip.io
+    http:
       paths:
       - path: /service1
         pathType: Prefix
@@ -22,6 +22,7 @@ spec:
             name: service1-svc
             port:
               number: 80
+
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
@@ -53,7 +54,7 @@ spec:
     - web
     - websecure		# <-- Only listen on port 443 (HTTPS)
   routes:
-  - match: PathPrefix(`/service1`)
+  - match: Host(`service1.192.168.111.129.nip.io`) && PathPrefix(`/service1`)
     kind: Rule
     middlewares:
     - name: service1-strip
