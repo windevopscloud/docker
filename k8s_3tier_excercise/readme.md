@@ -230,4 +230,3 @@ Implementation and Testing
    kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('ok')"
    kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432
    ```
-   
