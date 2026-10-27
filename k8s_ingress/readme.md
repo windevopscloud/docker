@@ -1,4 +1,4 @@
-1. Implement ingress controller using traefik.
+1. Implement ingress controller using Traefik.
 ```bash
 kubectl apply -f ic-traefik-hn_update1.yaml
 ```
@@ -16,9 +16,9 @@ kubectl create secret tls service1-tls-secret --cert=tls.crt --key=tls.key
 kubectl create secret tls cheddar-tls-secret --cert=tls.crt --key=tls.key
 ```
 
-4. Deploy "service1" and make use of traefik ingressroute to route requests, ssl offloading and 
-```bash
+4. Deploy "service1" and make use of Traefik ingressroute to route requests, ssl offloading and 
 http to https redirection.
+```bash
 kubectl apply -f service1-ingressroute.yaml
 ```
 Following resources are created: Deployment, Service, Middleware, Ingressroute
@@ -34,7 +34,7 @@ Also access the URL through browser to verify redirection and page content.
 http://service1.192.168.111.129.nip.io/service1
 ```
 
-6. Deploy "cheddar" and make use of native Ingress resource and traefik annotations to route requests, ssl offloading and http to https redirection.
+6. Deploy "cheddar" and make use of native Ingress resource and Traefik annotations to route requests, ssl offloading and http to https redirection.
 ```bash
 kubectl apply -f cheddar-annotations.yaml
 ```
