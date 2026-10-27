@@ -93,121 +93,170 @@ VPA not implemented
 10. Network Policy (Zero Trust)
 
 Prerequisites
-================
-Enable Microk8s addons:
+1. Enable MicroK8s addons
+bash
 microk8s status
 microk8s enable dns hostpath-storage metrics-server rbac
+2. Enable Traefik ingress
 
-Enable Traefik Ingress:
-https://github.com/windevopscloud/docker/blob/main/k8s_ingress/ic-traefik-hn_update1.yaml
+Deploy Traefik using this manifest: ic-traefik-hn_update1.yaml
 
-Generate SSL Certfificate:
+bash
+kubectl apply -f ic-traefik-hn_update1.yaml
+3. Generate an SSL certificate (self-signed)
+bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout tls.key -out tls.crt \
   -subj "/CN=frontend.192.168.111.129.nip.io" \
   -addext "subjectAltName=DNS:frontend.192.168.111.129.nip.io"
-
-Create TLS secret:
+4. Create the TLS secret
+bash
 kubectl create secret tls frontend-tls-secret --cert=tls.crt --key=tls.key -n default
-
-Allow kubelet port, Service Network, and POD Network IP range:
+5. Open the firewall for the kubelet port, pod network and service network
+bash
 systemctl is-active firewalld
 firewall-cmd --list-all
 firewall-cmd --zone=trusted --list-sources
+
 firewall-cmd --permanent --add-port=10250/tcp
 firewall-cmd --permanent --zone=trusted --add-source=10.1.0.0/16
 firewall-cmd --permanent --zone=trusted --add-source=10.152.183.0/24
 firewall-cmd --reload
-
+Range	Purpose
+10250/tcp	kubelet API (used by metrics-server)
+10.1.0.0/16	Pod network
+10.152.183.0/24	Service (ClusterIP) network
 Implementation and Testing
-=============================
-1. Apply the yaml files to create the resources
+1. Apply the YAML files
 
-2. Check and ensure the resources are created and running scuccesfully 
-   kubectl version
-   kubectl get nodes
-   kubectl get secrets
-   kubectl get pods
-   kubectl get pvc
-   kubectl describe pod <backend-pod-name>
-   kubectl get svc frontend
-   kubectl get ingress
-   kubectl get hpa
-   kubectl get pdb
-      
-   Check NetworkPolicy in action:
-   kubectl get networkpolicy
-   kubectl describe networkpolicy backend-db-only
-   kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('backend -> postgres: OPEN')"
-   kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432; echo "exit code: $?"
+Apply the manifests in this order, so dependencies exist before the resources that use them:
 
-   Check POD metrics:
-   kubectl top pods
+Secrets and ConfigMaps
+RBAC (ServiceAccount, Role, RoleBinding)
+PostgreSQL (StatefulSet and Service)
+Backend (Deployment and Service)
+Frontend (Deployment and Service)
+Ingress and redirect middleware
+HPA, PDB and NetworkPolicy
+bash
+kubectl apply -f <file>.yaml
+2. Verify that the resources are created and running
+bash
+kubectl version
+kubectl get nodes
+kubectl get secrets
+kubectl get pods
+kubectl get pvc
+kubectl describe pod <backend-pod-name>
+kubectl get svc frontend
+kubectl get ingress
+kubectl get hpa
+kubectl get pdb
 
+Check the NetworkPolicy in action:
+
+bash
+kubectl get networkpolicy
+kubectl describe networkpolicy backend-db-only
+kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('backend -> postgres: OPEN')"
+kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432; echo "exit code: $?"
+
+Check pod metrics:
+
+bash
+kubectl top pods
 3. Tests
-   *** Autoscaling Test:** See HPA in Action: Load generator will continuously hits the backend service, increasing CPU usage. When the CPU threshold defined in the hpa is breached, it will start additional PODS (upto max replica) as defined in the hpa.
+Autoscaling test: see the HPA in action
 
-   for i in 1 2 3; do
-     kubectl run load-$i --image=busybox --restart=Never -- /bin/sh -c \
-     "while true; do wget -q -T 5 -O- http://backend:5000/cpu >/dev/null; done"
-   done
+The load generators continuously hit the backend and increase CPU usage. When the CPU threshold defined in the HPA is breached, Kubernetes starts additional pods, up to the maximum replicas.
 
-   kubectl get hpa -w
-   kubectl get pods -l app=backend -w
-   kubectl top pods -l app=backend     # real CPU per pod
-   kubectl top nodes                   # make sure the node isn't maxed out
-   kubectl describe hpa backend-hpa    # the Events section explains each scaling decision
+bash
+for i in 1 2 3; do
+  kubectl run load-$i --image=busybox --restart=Never -- /bin/sh -c \
+    "while true; do wget -q -T 5 -O- http://backend:5000/cpu >/dev/null; done"
+done
 
-   kubectl delete pod load-1 load-2 load-3
+Watch the result:
 
-   *** Pod Failure Simulation:** Test Self-Healing, PDB & Affinity
-   kubectl delete pod -l app=backend --force
-   kubectl get pods     # This will show backend pod created again
+bash
+kubectl get hpa -w
+kubectl get pods -l app=backend -w
+kubectl top pods -l app=backend     # real CPU per pod
+kubectl top nodes                   # make sure the node isn't maxed out
+kubectl describe hpa backend-hpa    # the Events section explains each scaling decision
 
-   kubectl delete pod -l app=backend     # Since delete removes pods directly through the API, it doesnt honor PDB. A PDB only applies to evictions (kubectl drain, node upgrades, or the Eviction API)
+Stop the load:
 
-   for POD in $(kubectl get pod -l app=backend -o jsonpath='{.items[*].metadata.name}'); do
-    echo "--- evicting $POD"
-    kubectl create --raw /api/v1/namespaces/default/pods/$POD/eviction -f - <<EOF
-    {"apiVersion":"policy/v1","kind":"Eviction","metadata":{"name":"$POD","namespace":"default"}}
-    EOF
-   done
+bash
+kubectl delete pod load-1 load-2 load-3
 
-   kubectl get pods -l app=backend
-   kubectl get pods -o wide
+The HPA scales back down to the minimum after about 5 minutes.
 
-   *** Secret & ConfigMap:** Test configuration change rollouts without impacting availabiltiy
-   Access the URL and note env value: https://frontend.192.168.111.129.nip.io/
-   Edit 6-app-config.yaml; APP_ENV: production to APP_ENV: staging
+Pod failure simulation: self-healing, PDB and affinity
+
+Self-healing: delete the backend pods and watch them being recreated.
+
+bash
+kubectl delete pod -l app=backend --force
+kubectl get pods     # shows the backend pods created again
+
+A plain delete removes pods directly through the API, so it does not honor the PDB. A PDB only applies to evictions (kubectl drain, node upgrades, or the Eviction API).
+
+bash
+kubectl delete pod -l app=backend
+
+To test the PDB, use the Eviction API. The first eviction succeeds and the second is rejected while the replacement pod is not yet Ready:
+
+bash
+for POD in $(kubectl get pod -l app=backend -o jsonpath='{.items[*].metadata.name}'); do
+  echo "--- evicting $POD"
+  kubectl create --raw /api/v1/namespaces/default/pods/$POD/eviction -f - <<EOF
+{"apiVersion":"policy/v1","kind":"Eviction","metadata":{"name":"$POD","namespace":"default"}}
+EOF
+done
+
+Check pod placement:
+
+bash
+kubectl get pods -l app=backend
+kubectl get pods -o wide
+Secret and ConfigMap: configuration changes without downtime
+Open https://frontend.192.168.111.129.nip.io/ and note the env value.
+Edit 6-app-config.yaml and change APP_ENV: production to APP_ENV: staging.
+Apply and roll out:
+bash
    kubectl apply -f 6-app-config.yaml
    kubectl rollout restart deployment backend
    kubectl rollout status deploy/backend
-   Access the URL and note env value change: https://frontend.192.168.111.129.nip.io/
+Reload the URL and confirm the env value changed.
 
-   Updating db password
-   kubectl exec postgres-0 -- psql -U postgres -c "ALTER USER postgres PASSWORD 'newpass123';"
-   kubectl create secret generic db-secret --from-literal=password=newpass123 --dry-run=client -o yaml | kubectl apply -f -
-   kubectl rollout restart deploy/backend
+Updating the database password. Change it inside PostgreSQL first, then update the Secret, then restart the backend:
 
-   *** Persistent Data Test:** Prove Data Survives Restarts
-   Access the URL and note visits value: https://frontend.192.168.111.129.nip.io/
-   Access the URL multiple time and note the value incrementing, backend the db is getting updated.
+bash
+kubectl exec postgres-0 -- psql -U postgres -c "ALTER USER postgres PASSWORD 'newpass123';"
+kubectl create secret generic db-secret --from-literal=password=newpass123 --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deploy/backend
+
+Also update db-secret.yaml with the new value, otherwise the next kubectl apply restores the old password and the backend can no longer log in.
+
+Persistent data test: data survives restarts
+Open https://frontend.192.168.111.129.nip.io/ and note the visits value.
+Reload several times and confirm the value keeps increasing, which shows the backend is writing to the database.
+Query the database:
+bash
    kubectl exec postgres-0 -- psql -U postgres -c "select count(*), max(ts) from visits"
+Delete the database pod:
+bash
    kubectl delete pod postgres-0
-   Rerun the query again once the database pod is recreated to ensure the persistent storage works.
+Once the pod is recreated, run the query again. The count must continue from where it was, which proves the persistent storage works:
+bash
    kubectl exec postgres-0 -- psql -U postgres -c "select count(*), max(ts) from visits"
+Network policy validation: zero-trust networking
 
-   *** Network Policy Validation:** Zero-Trust Networking
-   Test Allows Traffic (Backend → Database), and Denies Traffic (Frontend → Database)
-   kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('ok')"
-   kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432
+Backend to database is allowed, and frontend to database is denied:
 
-   
+bash
+kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('ok')"
+kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432
 
-   
-
-
-
-
-
-
+Expected: the first command prints ok. The second times out.
