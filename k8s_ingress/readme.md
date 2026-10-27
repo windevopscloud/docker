@@ -3,6 +3,7 @@
 kubectl apply -f ic-traefik-hn_update1.yaml
 ```
 This resource is configured to use hostNetwork, port 80 and 443 is bind using hostPort.
+
 Entrypoints - http:web, and https:websecure
 
 2. Create ssl key and certificate, update the CN and SAN as per the requirement.
