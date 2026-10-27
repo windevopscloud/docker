@@ -120,3 +120,88 @@ firewall-cmd --reload
 
 Implementation and Testing
 =============================
+1. Apply the yaml files to create the resources
+
+2. Check and ensure the resources are created and running scuccesfully 
+   kubectl version
+   kubectl get nodes
+   kubectl get secrets
+   kubectl get pods
+   kubectl get pvc
+   kubectl describe pod <backend-pod-name>
+   kubectl get svc frontend
+   kubectl get ingress
+   kubectl get hpa
+   kubectl get pdb
+      
+   Check NetworkPolicy in action:
+   kubectl get networkpolicy
+   kubectl describe networkpolicy backend-db-only
+   kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('backend -> postgres: OPEN')"
+   kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432; echo "exit code: $?"
+
+   Check POD metrics:
+   kubectl top pods
+
+3. Tests
+   *** Autoscaling Test:** See HPA in Action: Load generator will continuously hits the backend service, increasing CPU usage. When the CPU threshold defined in the hpa is breached, it will start additional PODS (upto max replica) as defined in the hpa.
+
+   for i in 1 2 3; do
+     kubectl run load-$i --image=busybox --restart=Never -- /bin/sh -c \
+     "while true; do wget -q -T 5 -O- http://backend:5000/cpu >/dev/null; done"
+   done
+
+   kubectl get hpa -w
+   kubectl get pods -l app=backend -w
+   kubectl top pods -l app=backend     # real CPU per pod
+   kubectl top nodes                   # make sure the node isn't maxed out
+   kubectl describe hpa backend-hpa    # the Events section explains each scaling decision
+
+   kubectl delete pod load-1 load-2 load-3
+
+   *** Pod Failure Simulation:** Test Self-Healing, PDB & Affinity
+   kubectl delete pod -l app=backend --force
+   kubectl get pods     # This will show backend pod created again
+
+   kubectl delete pod -l app=backend     # Since delete removes pods directly through the API, it doesnt honor PDB. A PDB only applies to evictions (kubectl drain, node upgrades, or the Eviction API)
+
+   for POD in $(kubectl get pod -l app=backend -o jsonpath='{.items[*].metadata.name}'); do
+    echo "--- evicting $POD"
+    kubectl create --raw /api/v1/namespaces/default/pods/$POD/eviction -f - <<EOF
+    {"apiVersion":"policy/v1","kind":"Eviction","metadata":{"name":"$POD","namespace":"default"}}
+    EOF
+   done
+
+   kubectl get pods -l app=backend
+   kubectl get pods -o wide
+
+   *** Secret & ConfigMap:** Test configuration change rollouts without impacting availabiltiy
+   Access the URL and note env value: https://frontend.192.168.111.129.nip.io/
+   Edit 6-app-config.yaml; APP_ENV: production to APP_ENV: staging
+   kubectl apply -f 6-app-config.yaml
+   kubectl rollout restart deployment backend
+   kubectl rollout status deploy/backend
+   Access the URL and note env value change: https://frontend.192.168.111.129.nip.io/
+
+   *** Persistent Data Test:** Prove Data Survives Restarts
+   Access the URL and note visits value: https://frontend.192.168.111.129.nip.io/
+   Access the URL multiple time and note the value incrementing, backend the db is getting updated.
+   kubectl exec postgres-0 -- psql -U postgres -c "select count(*), max(ts) from visits"
+   kubectl delete pod postgres-0
+   Rerun the query again once the database pod is recreated to ensure the persistent storage works.
+   kubectl exec postgres-0 -- psql -U postgres -c "select count(*), max(ts) from visits"
+
+   *** Network Policy Validation:** Zero-Trust Networking
+   Test Allows Traffic (Backend → Database), and Denies Traffic (Frontend → Database)
+   kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('ok')"
+   kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432
+
+   
+
+   
+
+
+
+
+
+
