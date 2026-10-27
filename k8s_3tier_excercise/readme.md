@@ -163,6 +163,14 @@ Implementation and Testing
    kubectl top pods
    ```
 
+   URLS:
+   ```bash
+   https://frontend.192.168.111.129.nip.io
+   https://frontend.192.168.111.129.nip.io/api/health
+   https://frontend.192.168.111.129.nip.io/api/visits
+   https://frontend.192.168.111.129.nip.io/api/cpu
+   ```
+
 3. Tests
 
    *** Autoscaling Test:** See HPA in Action: Load generator will continuously hits the backend service, increasing CPU usage. When the CPU threshold defined in the hpa is breached, it will start additional PODS (upto max replica) as defined in the hpa.
