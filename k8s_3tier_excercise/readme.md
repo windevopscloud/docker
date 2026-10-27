@@ -183,6 +183,11 @@ Implementation and Testing
    kubectl rollout status deploy/backend
    Access the URL and note env value change: https://frontend.192.168.111.129.nip.io/
 
+   Updating db password
+   kubectl exec postgres-0 -- psql -U postgres -c "ALTER USER postgres PASSWORD 'newpass123';"
+   kubectl create secret generic db-secret --from-literal=password=newpass123 --dry-run=client -o yaml | kubectl apply -f -
+   kubectl rollout restart deploy/backend
+
    *** Persistent Data Test:** Prove Data Survives Restarts
    Access the URL and note visits value: https://frontend.192.168.111.129.nip.io/
    Access the URL multiple time and note the value incrementing, backend the db is getting updated.
