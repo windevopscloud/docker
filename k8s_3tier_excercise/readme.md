@@ -164,8 +164,6 @@ Implementation and Testing
    ```
 
 3. Tests
-   ```bash
-   ```
    *** Autoscaling Test:** See HPA in Action: Load generator will continuously hits the backend service, increasing CPU usage. When the CPU threshold defined in the hpa is breached, it will start additional PODS (upto max replica) as defined in the hpa.
    ```bash
    for i in 1 2 3; do
