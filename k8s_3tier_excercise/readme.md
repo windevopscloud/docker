@@ -95,8 +95,10 @@ VPA not implemented
 Prerequisites
 ================
 Enable Microk8s addons:
+```bash
 microk8s status
 microk8s enable dns hostpath-storage metrics-server rbac
+```
 
 Enable Traefik Ingress:
 https://github.com/windevopscloud/docker/blob/main/k8s_ingress/ic-traefik-hn_update1.yaml
