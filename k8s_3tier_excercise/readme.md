@@ -132,6 +132,9 @@ firewall-cmd --reload
 Implementation and Testing
 =============================
 1. Apply the yaml files to create the resources
+   ```bash
+   kubectl apply -f *.yaml
+   ```
 
 2. Check and ensure the resources are created and running successfuly 
    ```bash
