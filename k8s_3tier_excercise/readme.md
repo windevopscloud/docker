@@ -167,7 +167,6 @@ Implementation and Testing
    ```bash
    https://frontend.192.168.111.129.nip.io
    https://frontend.192.168.111.129.nip.io/api/health
-   https://frontend.192.168.111.129.nip.io/api/visits
    https://frontend.192.168.111.129.nip.io/api/cpu
    ```
 
