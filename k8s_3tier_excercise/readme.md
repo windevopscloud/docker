@@ -101,18 +101,25 @@ microk8s enable dns hostpath-storage metrics-server rbac
 ```
 
 Enable Traefik Ingress:
+```bash
 https://github.com/windevopscloud/docker/blob/main/k8s_ingress/ic-traefik-hn_update1.yaml
+```
 
 Generate SSL Certfificate:
+```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout tls.key -out tls.crt \
   -subj "/CN=frontend.192.168.111.129.nip.io" \
   -addext "subjectAltName=DNS:frontend.192.168.111.129.nip.io"
+```
 
 Create TLS secret:
+```bash
 kubectl create secret tls frontend-tls-secret --cert=tls.crt --key=tls.key -n default
+```
 
 Allow kubelet port, Service Network, and POD Network IP range:
+```bash
 systemctl is-active firewalld
 firewall-cmd --list-all
 firewall-cmd --zone=trusted --list-sources
@@ -120,12 +127,14 @@ firewall-cmd --permanent --add-port=10250/tcp
 firewall-cmd --permanent --zone=trusted --add-source=10.1.0.0/16
 firewall-cmd --permanent --zone=trusted --add-source=10.152.183.0/24
 firewall-cmd --reload
+```
 
 Implementation and Testing
 =============================
 1. Apply the yaml files to create the resources
 
 2. Check and ensure the resources are created and running scuccesfully 
+   ```bash
    kubectl version
    kubectl get nodes
    kubectl get secrets
@@ -136,13 +145,16 @@ Implementation and Testing
    kubectl get ingress
    kubectl get hpa
    kubectl get pdb
-      
+   ```
+
    Check NetworkPolicy in action:
+   ```bash
    kubectl get networkpolicy
    kubectl describe networkpolicy backend-db-only
    kubectl exec deploy/backend -- python -c "import socket;socket.create_connection(('postgres',5432),3);print('backend -> postgres: OPEN')"
    kubectl exec deploy/frontend -- nc -zv -w3 postgres 5432; echo "exit code: $?"
-
+   ```
+   
    Check POD metrics:
    kubectl top pods
 
