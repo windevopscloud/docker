@@ -1,5 +1,6 @@
-End to End Flow
-===================
+## End to End Flow
+
+```text
 User (browser)
  │  http://frontend.192.168.111.129.nip.io   (nip.io DNS resolves to the node IP)
  ▼
@@ -13,26 +14,26 @@ Ingress frontend-ingress-secure  (class: cluster-wide-ingress)
  ▼
 Service frontend (ClusterIP :80)
  ▼
-Frontend Pods x2  (Deployment, nginx:alpine)        ◄─ ConfigMap frontend-content
- │   /      → serves index.html                         (nginx config + page)
- │   /api/  → proxy_pass http://backend:5000/          PDB: frontend-pdb
+Frontend Pods x2  (Deployment, nginx:alpine)     ◄─ ConfigMap frontend-content
+ │   /      → serves index.html                     (nginx config + page)
+ │   /api/  → proxy_pass http://backend:5000/       PDB: frontend-pdb
  ▼
 Service backend (ClusterIP :5000)
  ▼
-Backend Pods x2-10  (Deployment, python:3.10-slim)  ◄─ ConfigMap backend-code (app.py)
- │                                                   ◄─ ConfigMap app-config (APP_ENV)
- │                                                   ◄─ Secret db-secret (DB_PASSWORD)
- │                                                      ServiceAccount: backend-sa
- │                                                      HPA: backend-hpa (70% CPU)
- │                                                      PDB: backend-pdb
+Backend Pods x2-10  (Deployment, python:3.10-slim) ◄─ ConfigMap backend-code (app.py)
+ │                                                  ◄─ ConfigMap app-config (APP_ENV)
+ │                                                  ◄─ Secret db-secret (DB_PASSWORD)
+ │                                                     ServiceAccount: backend-sa
+ │                                                     HPA: backend-hpa (70% CPU)
+ │                                                     PDB: backend-pdb
  ▼
 Service postgres (headless, :5432)
  │   NetworkPolicy backend-db-only: only app=backend may connect
  ▼
-Pod postgres-0  (StatefulSet, postgres:15)          ◄─ Secret db-secret (POSTGRES_PASSWORD)
+Pod postgres-0  (StatefulSet, postgres:15)       ◄─ Secret db-secret (POSTGRES_PASSWORD)
  ▼
 PVC data-postgres-0 ─► PV (microk8s-hostpath, 5Gi)
-
+```
 
 Kubernetes features used
 ============================
