@@ -276,8 +276,8 @@ cat <<EOF | sudo tee /etc/sysctl.d/90-router.conf
 net.ipv4.ip_forward = 1
 net.ipv4.conf.all.send_redirects = 0
 EOF
-sudo sysctl --system
 
+sudo sysctl --system
 sudo firewall-cmd --permanent --add-port=1179/tcp && sudo firewall-cmd --reload
 sudo systemctl enable --now frr
 sudo ss -ltnp | grep 1179
@@ -317,9 +317,7 @@ sudo firewall-cmd --zone=trusted --list-sources
 #Install MetalLB (Master Node):
 helm repo add metallb https://metallb.github.io/metallb
 helm repo update
-   
 helm uninstall metallb -n metallb-system
-
 helm install metallb metallb/metallb -n metallb-system --create-namespace --set frrk8s.enabled=false --set speaker.frr.enabled=false
 	  
 kubectl get pods -n metallb-system -w
@@ -345,7 +343,6 @@ apiVersion: metallb.io/v1beta1
 EOF
 
 kubectl -f apply metallb_pool.yaml
-
 kubectl get ipaddresspool -n metallb-system
 
 #Create the peer and advertisement
@@ -407,6 +404,135 @@ curl -i http://192.168.111.200
 kubectl logs -n metallb-system metallb-speaker-bj9k5 | grep -i announc
 ```
 
+---
+
+### Installing Longhorn (CSI)
+<pre>
+Check disks and compatibility (workers): Longhorn stores data in /var/lib/longhorn by default. 
+For a lab the root disk is fine if it has 30 GB or more free.
+</pre>
+```bash
+lsblk
+df -h /var/lib
+```
+```bash
+#Prerequisites on both Worker Nodes
+sudo dnf install -y iscsi-initiator-utils nfs-utils cryptsetup device-mapper
+sudo systemctl enable --now iscsid
+echo iscsi_tcp | sudo tee /etc/modules-load.d/iscsi_tcp.conf
+sudo modprobe iscsi_tcp
+
+#If multipathd is active, it can grab Longhorn’s block devices. Add a blacklist for sd[a-z0-9]+ devices to /etc/multipath.conf and restart it, or disable it if you don’t use multipath.
+systemctl is-active multipathd
+```
+```bash
+#Install Longhorn
+helm repo add longhorn https://charts.longhorn.io
+helm repo update
+helm show values longhorn/longhorn | grep -inE 'replicaCount|ReplicaCount'
+helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace --set persistence.defaultClassReplicaCount=2 --set defaultSettings.defaultReplicaCount=2
+kubectl get pods -n longhorn-system -o wide -w
+
+#Verify
+kubectl get sc
+kubectl get nodes.longhorn.io -n longhorn-system
+
+#PortForward to Access the Longhorn Console
+#http://192.168.111.130/longhorn
+#kubectl -n longhorn-system port-forward svc/longhorn-frontend 8080:80
+kubectl -n longhorn-system port-forward --address 0.0.0.0 svc/longhorn-frontend 8080:8080
+
+#Test creating pod, pv, pvc
+sudo tee ~/longhorn_verify.yaml <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-pvc
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+spec:
+  containers:
+  - name: c
+    image: busybox
+    command: ["sh","-c","echo hello > /data/f && sleep 3600"]
+    volumeMounts:
+    - {name: v, mountPath: /data}
+  volumes:
+  - name: v
+    persistentVolumeClaim:
+      claimName: test-pvc
+EOF
+
+kubectl apply -f longhorn_verify.yaml
+kubectl get pv,pvc,pod
+```
+```bash
+#Create Target to configure backups.
+#Backups go to an external target, so for the lab, create NFS export on the Master Node (Outside the Worker Node disks where PV exist)
+#Make sure there's enough free space (20 GB+ is comfortable)
+df -h /srv
+sudo dnf install -y nfs-utils
+sudo mkdir -p /srv/longhorn-backup
+echo '/srv/longhorn-backup 192.168.111.0/24(rw,sync,no_root_squash)' | sudo tee -a /etc/exports
+sudo systemctl enable --now nfs-server
+sudo exportfs -rav
+#Should list the export for 192.168.111.0/24
+sudo exportfs -v
+```
+```text
+Access Longhorn Console UI (Settings > Backup Target > Default [Edit]), use something like:
+Name: default
+URL	nfs://192.168.111.130:/srv/longhorn-backup
+Poll interval: default
+Credential secret: leave empty for NFS
+```
+```bash
+kubectl exec test-pod -- ls /data
+kubectl exec test-pod -- cat /data/f
+kubectl exec test-pod -- sh -c 'echo before-backup > /data/f2 && sync'
+
+#From Longhorn Console UI, Go to Volume, Select the Volume and Create Backup
+#Master Node: Validate backup created
+ls -R /srv/longhorn-backup | head
+
+kubectl delete -f longhorn_verify.yaml
+#kubectl delete pod test-pod
+#kubectl delete pvc test-pvc
+
+#From Longhorn Console UI, Go to Backup, Select the created Backup and Restore
+#Then, Go to Volume, Select the Volume, From Burger Menu Create PV/PVC
+
+sudo tee ~/longhorn_verify_restore.yaml <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restore-pod
+spec:
+  containers:
+  - name: c
+    image: busybox
+    command: ["sleep","3600"]
+    volumeMounts:
+    - {name: v, mountPath: /data}
+  volumes:
+  - name: v
+    persistentVolumeClaim:
+      claimName: restored-test
+EOF
+
+kubectl apply -f longhorn_verify_restore.yaml
+kubectl exec restore-pod -- ls /data/f2
+kubectl exec restore-pod -- cat /data/f2
+```
 
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
