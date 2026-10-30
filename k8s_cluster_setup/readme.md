@@ -534,5 +534,165 @@ kubectl exec restore-pod -- ls /data/f2
 kubectl exec restore-pod -- cat /data/f2
 ```
 
+---
+
+### Installing Metric Server
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl patch deployment metrics-server -n kube-system --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
+
+kubectl get pod -A | grep -i metric
+```
+
+---
+
+### Installing TLS Certificate
+```bash
+mkdir -p ~/lab-certs && cd ~/lab-certs
+
+openssl genrsa -out ca.key 4096
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 1825 -subj "/CN=lab-ca" -out ca.crt
+
+openssl genrsa -out tls.key 2048
+openssl req -new -key tls.key -subj "/CN=*.192.168.111.200.nip.io" -out tls.csr
+cat > ext.cnf <<EOF
+subjectAltName=DNS:*.192.168.111.200.nip.io
+extendedKeyUsage=serverAuth
+EOF
+openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 825 -sha256 -extfile ext.cnf
+  
+kubectl create secret tls lab-tls -n traefik --cert=tls.crt --key=tls.key
+kubectl apply -f traefik_cert.yaml
+
+#Updating Traefik to redirect http to https:
+helm show values traefik/traefik | grep -n -B2 -A6 redirections
+helm upgrade traefik traefik/traefik -n traefik --reuse-values --set ports.web.http.redirections.entryPoint.to=websecure --set ports.web.http.redirections.entryPoint.scheme=https
+```
+
+---
+
+### Installing Grafana and Prometheus
+```bash
+sudo tee ~/traefik_prometheus.yaml <<EOF
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: basic-auth
+  namespace: monitoring
+spec:
+  basicAuth:
+    secret: basic-auth-secret
+EOF
+
+sudo tee ~/grafana_prometheus_values.yaml <<EOF
+grafana:
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - grafana.192.168.111.200.nip.io
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
+    hosts:
+      - prometheus.192.168.111.200.nip.io
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+alertmanager:
+  enabled: false
+EOF
+
+kubectl create namespace monitoring
+#By default prometheus UI does not have password, configuring secret so that browser will prompt for login
+kubectl create secret generic basic-auth-secret -n monitoring --from-literal=users="admin:$(openssl passwd -apr1 'admin123')"
+kubectl apply -f traefik_prometheus.yaml
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana_prometheus_values.yaml --set grafana.adminPassword='admin123'
+kubectl get pods -n monitoring -w
+```
+```text
+Get Grafana 'admin' user password by running:
+kubectl --namespace monitoring get secrets monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+
+Get your grafana admin user password by running:
+kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
+
+Access Grafana local instance:
+export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=monitoring" -oname)
+kubectl --namespace monitoring port-forward $POD_NAME 3000
+```
+
+---
+
+### Installing Longhorn Authentication
+```bash
+sudo tee ~/traefik_longhorn.yaml <<EOF
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: basic-auth
+  namespace: longhorn-system
+spec:
+  basicAuth:
+    secret: basic-auth-secret
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: longhorn-system-basic-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: longhorn.192.168.111.200.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: longhorn-frontend
+            port:
+              number: 80
+EOF
+
+kubectl create secret generic basic-auth-secret -n longhorn-system --from-literal=users="admin:$(openssl passwd -apr1 'admin123')"
+kubectl apply -f traefik_longhorn.yaml
+kubectl get ingress,middleware -n longhorn-system
+
+curl --cacert ~/lab-certs/ca.crt -I https://longhorn.192.168.111.200.nip.io
+curl --cacert ~/lab-certs/ca.crt -I -u admin:admin123 https://longhorn.192.168.111.200.nip.io
+```
+
+---
+
+### Installing K8s Dashboard (Headlamp)
+
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
