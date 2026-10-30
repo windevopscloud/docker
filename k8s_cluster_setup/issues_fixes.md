@@ -1,5 +1,5 @@
 ### Installing Calico (CNI)
-```tex
+<pre>
 1.	While creating calico, k8s verion and calico operator compatability issue.
 	On All Nodes K8s version upgraded from 1.30 to 1.34
 	sudo kubeadm reset -f
@@ -40,4 +40,4 @@
 	2nd Worker Node was also having same hostname as 1st Worker Node, updated the 2nd Worker hostname, reset the kubeadm and join again,
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /var/lib/kubelet
-```
+<pre>

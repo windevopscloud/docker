@@ -151,7 +151,7 @@ systemctl enable kubelet.service
 sudo kubeadm init --apiserver-advertise-address=192.168.111.130 --pod-network-cidr=10.244.0.0/16
 kubectl get nodes
 ```
-```text
+<pre>
 Your Kubernetes control-plane has initialized successfully!
 To start using your cluster, you need to run the following as a regular user:
   mkdir -p \$HOME/.kube
@@ -162,7 +162,7 @@ Nodes show NotReady until the CNI is installed.
 [root@localhost ~]# kubectl get nodes
 NAME         STATUS     ROLES           AGE     VERSION
 k8s-master   NotReady   control-plane   9m12s   v1.30.14
-```
+<pre>
 
 ---
 
