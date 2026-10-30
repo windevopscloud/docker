@@ -246,14 +246,12 @@ sudo ss -ltnp | grep ':179 '
 sudo dnf install -y frr
 
 #Edit /etc/frr/daemons and update the values as below
-<pre>
 bgpd=yes
 bgpd_options="   -A 127.0.0.1 -p 1179"
-</pre>
+
 vi /etc/frr/daemons
 
 #Edit /etc/frr/frr.conf and update the values as below
-<pre>
 frr defaults traditional
 hostname k8s-master
 log syslog informational
@@ -270,9 +268,144 @@ router bgp 64512
   maximum-paths 4
  exit-address-family
 !
-</pre>
+
+vi /etc/frr/frr.conf
+#"passive" makes FRR wait for the workers to connect instead of dialing out, which would hit Calico’s BIRD on port 179
+
+cat <<EOF | sudo tee /etc/sysctl.d/90-router.conf
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.send_redirects = 0
+EOF
+sudo sysctl --system
+
+sudo firewall-cmd --permanent --add-port=1179/tcp && sudo firewall-cmd --reload
+sudo systemctl enable --now frr
+sudo ss -ltnp | grep 1179
+```
+```bash
+#Firewall: All Nodes (Master, Worker1, Worker2), trust the node network and the pod network
+sudo firewall-cmd --permanent --zone=trusted --add-source=192.168.111.0/24
+sudo firewall-cmd --permanent --zone=trusted --add-source=10.244.0.0/16
+
+#Calico: BGP between nodes, VXLAN, Typha
+sudo firewall-cmd --permanent --add-port=179/tcp
+sudo firewall-cmd --permanent --add-port=4789/udp
+sudo firewall-cmd --permanent --add-port=5473/tcp
+
+#kubelet, and MetalLB speaker membership
+sudo firewall-cmd --permanent --add-port=10250/tcp
+sudo firewall-cmd --permanent --add-port=7946/tcp --add-port=7946/udp
+
+#Master Node
+sudo firewall-cmd --permanent --add-port=6443/tcp
+sudo firewall-cmd --permanent --add-port=2379-2380/tcp
+sudo firewall-cmd --permanent --add-port=10257/tcp --add-port=10259/tcp
+sudo firewall-cmd --permanent --add-port=1179/tcp
+
+#Worker Nodes
+sudo firewall-cmd --permanent --add-port=10256/tcp
+sudo firewall-cmd --permanent --add-port=30000-32767/tcp
+sudo firewall-cmd --permanent --add-port=30000-32767/udp
+
+#Apply and Verify
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-all
+sudo firewall-cmd --zone=trusted --list-sources
 ```
 
+```bash
+#Install MetalLB (Master Node):
+helm repo add metallb https://metallb.github.io/metallb
+helm repo update
+   
+helm uninstall metallb -n metallb-system
+
+helm install metallb metallb/metallb -n metallb-system --create-namespace --set frrk8s.enabled=false --set speaker.frr.enabled=false
+	  
+kubectl get pods -n metallb-system -w
+	
+#To see whether a pull is moving, check the Node(Master) the controller is on:
+sudo ctr -n k8s.io images ls | grep metallb
+
+#Or pull manually on that Node (Master) and watch the progress:
+sudo ctr -n k8s.io images pull quay.io/metallb/controller:v0.16.1
+
+kubectl get secret metallb-memberlist -n metallb-system
+
+#Once the controller and speakers are Running, wait about 30 seconds, then create the pool:
+sudo tee ~/metallb_pool.yaml <<EOF
+apiVersion: metallb.io/v1beta1
+  kind: IPAddressPool
+  metadata:
+    name: lab-pool
+    namespace: metallb-system
+  spec:
+    addresses:
+    - 192.168.111.200-192.168.111.220
+EOF
+
+kubectl -f apply metallb_pool.yaml
+
+kubectl get ipaddresspool -n metallb-system
+
+#Create the peer and advertisement
+sudo tee ~/metallb_advertisement.yaml <<EOF
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: master-router
+  namespace: metallb-system
+spec:
+  myASN: 64513
+  peerASN: 64512
+  peerAddress: 192.168.111.130
+  peerPort: 1179
+  nodeSelectors:
+  - matchExpressions:
+    - key: node-role.kubernetes.io/control-plane
+      operator: DoesNotExist
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: lab-bgp
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - lab-pool
+EOF
+
+kubectl apply -f metallb_advertisement.yaml
+
+#Check the sessions
+sudo vtysh -c "show ip bgp summary"
+```
+
+---
+
+### Installing Ingress Controller (Traefik)
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik -n traefik --create-namespace \
+  --set deployment.replicas=2 \
+  --set service.type=LoadBalancer \
+  --set service.spec.externalTrafficPolicy=Local \
+  --set-string service.annotations."metallb\.io/loadBalancerIPs"=192.168.111.200
+
+kubectl get svc,pods -n traefik -o wide
+
+#PfxRcd should go to 1 per neighbor
+sudo vtysh -c "show ip bgp summary"
+
+#two next hops: .131 and .132
+sudo vtysh -c "show ip route 192.168.111.200"
+
+#Access LB; expected http response 404
+curl -i http://192.168.111.200
+
+kubectl logs -n metallb-system metallb-speaker-bj9k5 | grep -i announc
+```
 
 
 ### Troubleshooting
