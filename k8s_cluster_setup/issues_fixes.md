@@ -2,6 +2,8 @@
 <pre>
 1.	While creating calico, k8s verion and calico operator compatability issue.
 	On All Nodes K8s version upgraded from 1.30 to 1.34
+</prev>
+```bash
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d $HOME/.kube
 	sudo dnf remove -y kubelet kubeadm kubectl --setopt=disable_excludes=kubernetes
@@ -20,24 +22,29 @@
 	kubectl get crd | grep -c projectcalico.org
 	kubectl rollout restart deploy/tigera-operator -n tigera-operator
 	kubectl get pods -n calico-system -w
-	
+```
+<prev>	
 2.	While joining Node with Master encountered preflight error
 	[preflight] Some fatal errors occurred:
         [ERROR FileAvailable--etc-kubernetes-bootstrap-kubelet.conf]: /etc/kubernetes/bootstrap-kubelet.conf already exists
         [ERROR FileAvailable--etc-kubernetes-pki-ca.crt]: /etc/kubernetes/pki/ca.crt already exists
 
 	A previous join attempt, probably against the old 1.30 k8s cluster, left files behind. Clean the worker and join again.
-	
-	On Worker Node
+</prev>    
+```bash
+	#On Worker Node
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /etc/kubernetes /var/lib/kubelet $HOME/.kube
 	sudo systemctl restart containerd
 	kubeadm version -o short
-	
+```	
+<prev>
 3.	While joining 2nd Worker Node to Master Node, encountered error.
 	error: error execution phase kubelet-start: a Node with name "k8s-worker1" and status "Ready" already exists in the cluster. You must delete the existing Node or change the name of this new joining Node
 	
-	2nd Worker Node was also having same hostname as 1st Worker Node, updated the 2nd Worker hostname, reset the kubeadm and join again,
+	2nd Worker Node was also having same hostname as 1st Worker Node, updated the 2nd Worker hostname, reset the kubeadm and join again.
+</prev>
+```bash    
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /var/lib/kubelet
-</pre>
+```
