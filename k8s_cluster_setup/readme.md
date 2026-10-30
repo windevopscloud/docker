@@ -28,9 +28,14 @@ After the initial setup, the following addons and operators are installed and co
 ### Installing k8's
 1. Set Hostnames & Map IPs
 ```bash
-sudo hostnamectl set-hostname k8s-master        #Master Node
-sudo hostnamectl set-hostname k8s-worker1       #Worker Node1
-sudo hostnamectl set-hostname k8s-worker2       #Worker Node2
+#Master Node
+sudo hostnamectl set-hostname k8s-master
+
+#Worker Node1
+sudo hostnamectl set-hostname k8s-worker1
+
+#Worker Node2
+sudo hostnamectl set-hostname k8s-worker2       
 ```
 Map the static IPs of nodes inside /etc/hosts on all Nodes (Master and Both Workers)
 ```bash
@@ -40,6 +45,18 @@ sudo tee -a /etc/hosts <<EOF
 192.168.111.132 k8s-worker2
 EOF
 ```
+
+2. Disable Swap & Configure SELinux
+Kubernetes requires swap memory to be disabled entirely for proper performance scheduling
+```bash
+sudo swapoff -a                                         #Disable swap instantly
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab      #Persist the change across reboots
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/config/selinux
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+```
+
+
 
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
