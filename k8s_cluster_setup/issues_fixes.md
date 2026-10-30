@@ -14,15 +14,17 @@
 	sudo dnf clean all
 	sudo dnf install -y kubelet kubeadm kubectl --setopt=disable_excludes=kubernetes
 	sudo systemctl enable --now kubelet
-	kubeadm version -o short   # should print v1.34.x
+    
+    # Should print new k8s version - v1.34.x
+	kubeadm version -o short   
 
+    #Initialize k8s Cluster
 	sudo kubeadm init --apiserver-advertise-address=192.168.111.130 --pod-network-cidr=10.244.0.0/16
-	kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/tigera-operator.yaml
-	curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/custom-resources.yaml
-	kubectl get crd | grep -c projectcalico.org
-	kubectl rollout restart deploy/tigera-operator -n tigera-operator
-	kubectl get pods -n calico-system -w
 ```
+<pre>
+    After fixing the compatability issue between k8s version and Calico version, follow the steps mentioned under: Installing Calico (CNI)
+</pre>
+
 <pre>	
 2.	While joining Node with Master encountered preflight error
 	[preflight] Some fatal errors occurred:
@@ -32,11 +34,13 @@
 	A previous join attempt, probably against the old 1.30 k8s cluster, left files behind. Clean the worker and join again.
 </pre>    
 ```bash
-	#On Worker Node
+	#On Worker Node where preflight error occured
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /etc/kubernetes /var/lib/kubelet $HOME/.kube
 	sudo systemctl restart containerd
 	kubeadm version -o short
+
+    #Then join Worker Nodes by executing the join command as root
 ```	
 <pre>
 3.	While joining 2nd Worker Node to Master Node, encountered error.
@@ -47,4 +51,6 @@
 ```bash    
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /var/lib/kubelet
+
+    #Then join Worker Nodes by executing the join command as root
 ```
