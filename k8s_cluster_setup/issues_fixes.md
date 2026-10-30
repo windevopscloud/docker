@@ -40,4 +40,4 @@
 	2nd Worker Node was also having same hostname as 1st Worker Node, updated the 2nd Worker hostname, reset the kubeadm and join again,
 	sudo kubeadm reset -f
 	sudo rm -rf /etc/cni/net.d /var/lib/kubelet
-<pre>
+</pre>

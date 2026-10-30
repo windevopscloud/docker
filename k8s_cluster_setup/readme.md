@@ -162,7 +162,7 @@ Nodes show NotReady until the CNI is installed.
 [root@localhost ~]# kubectl get nodes
 NAME         STATUS     ROLES           AGE     VERSION
 k8s-master   NotReady   control-plane   9m12s   v1.30.14
-<pre>
+</pre>
 
 ---
 
