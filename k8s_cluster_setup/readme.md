@@ -205,10 +205,73 @@ To start using your cluster, you need to run the following as a regular user:
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
 </pre>
 
+---
 
+### Installing Git and Helm
+```bash
+sudo dnf install -y git
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm version
+```
 
+---
 
+### Installing Load Balancer (MetalLB)
+<pre>
+We chose BGP Mode instead of the default L2 Mode, to learn and to get real load balancing at the entry point.
 
+Default mode: L2
+One node answers ARP for the LoadBalancer IP, and all incoming traffic enters through that node. kube-proxy then forwards it to a pod, possibly on another node. No router needed, and it works on any flat network.
+Limits: one node’s network card carries all entry traffic, and failover takes a few seconds while another node takes over the ARP answer.
+
+BGP Mode:
+Each Worker Node tells a router “send 192.168.111.200 to me”, and the router spreads traffic across all of them (ECMP). The load is balanced across Worker Nodes at the network level, there’s no single entry node, and a dead node’s route is withdrawn.
+The costs:
+It needs a router, which here is FRR on the Master Node.
+It conflicts with Calico on port 179, so FRR configured to runs on 1179.
+Clients need a route through the Master Node.
+The Master Node becomes a single point of failure.
+Asymmetric return paths can cause trouble on a single subnet.
+
+FRR (Free Range Routing): Is open-source routing software for Linux. It turns an ordinary Linux machine into a router that speaks the same protocols as network gear from Cisco or Juniper.
+The Master Node runs FRR as the router (ASN 64512, port 1179).
+The MetalLB speakers on the Worker Node connect to it over BGP and say “I can deliver 192.168.111.200”. FRR puts those routes in the master’s kernel table, with maximum-paths 4 allowing it to use both workers at once (ECMP).
+</pre>
+```bash
+#Check the port 179 situation first, on the Master and Worker Nodes.
+#Since calico uses port 179 by default, the BGP router configured to use 1179 
+sudo ss -ltnp | grep ':179 '
+
+#Install and configure FRR on Master Node
+sudo dnf install -y frr
+
+#Edit /etc/frr/daemons and update the values as below
+<pre>
+bgpd=yes
+bgpd_options="   -A 127.0.0.1 -p 1179"
+</pre>
+vi /etc/frr/daemons
+
+#Edit /etc/frr/frr.conf and update the values as below
+<pre>
+frr defaults traditional
+hostname k8s-master
+log syslog informational
+!
+router bgp 64512
+ bgp router-id 192.168.111.130
+ no bgp ebgp-requires-policy
+ neighbor 192.168.111.131 remote-as 64513
+ neighbor 192.168.111.131 passive
+ neighbor 192.168.111.132 remote-as 64513
+ neighbor 192.168.111.132 passive
+ !
+ address-family ipv4 unicast
+  maximum-paths 4
+ exit-address-family
+!
+</pre>
+```
 
 
 
