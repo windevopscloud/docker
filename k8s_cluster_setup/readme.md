@@ -49,11 +49,19 @@ EOF
 2. Disable Swap & Configure SELinux
 Kubernetes requires swap memory to be disabled entirely for proper performance scheduling
 ```bash
-sudo swapoff -a                                         #Disable swap instantly
-sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab      #Persist the change across reboots
+#Disable swap instantly
+sudo swapoff -a
+
+#Persist the change across reboots
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+#SELinux in permissive mode
 sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/config/selinux
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+#Should print permissive
+getenforce
 ```
 
 
