@@ -186,10 +186,18 @@ kubectl get pods -n calico-system -w
 #Create Token to add nodes to k8s cluster
 kubeadm token create --print-join-command
 
-#Then join any number of worker nodes by running the join command on each worker node as root
+#Then join any number of worker nodes by running the join command (generated) on each worker node as root
 ```
-
-
+```bash
+kubectl get nodes
+```
+```text
+[root@localhost ~]# kubectl get nodes
+NAME          STATUS   ROLES           AGE   VERSION
+k8s-master    Ready    control-plane   50m   v1.34.13
+k8s-worker1   Ready    <none>          38m   v1.34.13
+k8s-worker2   Ready    <none>          30m   v1.34.13
+```
 
 
 
