@@ -191,13 +191,14 @@ kubeadm token create --print-join-command
 ```bash
 kubectl get nodes
 ```
-```text
-[root@localhost ~]# kubectl get nodes
-NAME          STATUS   ROLES           AGE   VERSION
-k8s-master    Ready    control-plane   50m   v1.34.13
-k8s-worker1   Ready    <none>          38m   v1.34.13
-k8s-worker2   Ready    <none>          30m   v1.34.13
-```
+<pre>
+Your Kubernetes control-plane has initialized successfully!
+To start using your cluster, you need to run the following as a regular user:
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+</pre>
+
 
 
 
