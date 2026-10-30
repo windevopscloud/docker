@@ -1,28 +1,29 @@
-Setup up K8s cluster from scratch with 3 Nodes (1 Master and 2 Worker) using kubeadm.
-VM Configuration:
-    2vCPU
-    4gb Memory
-    40gb Diskspace
-    RHEL10
+# Kubernetes Cluster Setup Guide
 
-After initial setup, follwing addons/operators are installed and configured for their respective purpose.
-    Container Network Interface(CNI) - Calico
-    Load Balancer - MetalLB (Using BGP Mode, rather than its default L2 Mode)
-    Ingress Controller - Traefik
-    Container Storage Interface(CSI) - Longhorn
-    Observability - Metrics Server, Prometheus and Grafana
-    K8s Dashboard - Headlamp
-    CI/CD - ArgoCD
-    Secrets Manager - 
-    Cert Manager -
-    Security - RBAC, NetworkPolicies, Encryption@Rest, Audit Logging, POD Security, etc.
-    Workload Hygiene - Resource requests/limits, liveness/readiness probes, Pod Distribution Budget, Autoscaling, Node Selector/Affinity, etc. 
+Setup a K8s cluster from scratch with 3 Nodes (1 Master and 2 Worker) using `kubeadm`.
 
-Issues faced while performing the setup and its fixes are documented in issues_fixes.md
+### VM Configuration
+*   **vCPU:** 2
+*   **Memory:** 4 GB
+*   **Diskspace:** 40 GB
+*   **OS:** RHEL 10
 
+### Post-Setup Addons & Operators
+After the initial setup, the following addons and operators are installed and configured for their respective purposes:
 
+*   **Container Network Interface (CNI):** Calico
+*   **Load Balancer:** MetalLB (Configured in BGP Mode instead of the default L2 Mode)
+*   **Ingress Controller:** Traefik
+*   **Container Storage Interface (CSI):** Longhorn
+*   **Observability:** Metrics Server, Prometheus, and Grafana
+*   **K8s Dashboard:** Headlamp
+*   **CI/CD:** ArgoCD
+*   **Secrets Manager:** *[Pending / To be added]*
+*   **Cert Manager:** *[Pending / To be added]*
+*   **Security:** RBAC, NetworkPolicies, Encryption@Rest, Audit Logging, Pod Security, etc.
+*   **Workload Hygiene:** Resource requests/limits, liveness/readiness probes, Pod Disruption Budgets, Autoscaling, Node Selector/Affinity, etc.
 
+---
 
-
-
-
+### Troubleshooting
+Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
