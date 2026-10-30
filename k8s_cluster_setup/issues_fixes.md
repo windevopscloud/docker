@@ -58,3 +58,32 @@ sudo rm -rf /etc/cni/net.d /var/lib/kubelet
 
 #Then join Worker Nodes by executing the join command as root
 ```
+
+---
+
+### Unable to connect k8s Cluster
+<pre>
+Issue1: After Node restart, unable to connect to k8s cluster
+
+Fix: Ensure the ~/.kube/config file is configured
+
+kubectl get pods -A -o wide
+E1029 08:37:59.856378   60476 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+</pre>
+```bash
+#Make sure following services are active and running.
+sudo systemctl enable --now containerd
+sudo systemctl enable --now kubelet
+
+sudo systemctl status containerd
+sudo systemctl status kubelet
+
+#This could be due to missing kube config reference.
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
