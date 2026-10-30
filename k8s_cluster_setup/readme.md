@@ -25,5 +25,21 @@ After the initial setup, the following addons and operators are installed and co
 
 ---
 
+### Installing k8's
+1. Set Hostnames & Map IPs
+```bash
+sudo hostnamectl set-hostname k8s-master        #Master Node
+sudo hostnamectl set-hostname k8s-worker1       #Worker Node1
+sudo hostnamectl set-hostname k8s-worker2       #Worker Node2
+```
+Map the static IPs of nodes inside /etc/hosts on all Nodes (Master and Both Workers)
+```bash
+sudo tee -a /etc/hosts <<EOF
+192.168.111.130 k8s-master
+192.168.111.131 k8s-worker1
+192.168.111.132 k8s-worker2
+EOF
+```
+
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
