@@ -164,6 +164,36 @@ NAME         STATUS     ROLES           AGE     VERSION
 k8s-master   NotReady   control-plane   9m12s   v1.30.14
 ```
 
+---
+
+### Installing Calico (CNI)
+1. Deploy a pod network to the cluster.
+```bash
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/tigera-operator.yaml
+kubectl get crd | grep -i projectcalico
+curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/custom-resources.yaml
+
+#Update the pod cidr value in custom-resources.yaml to (10.244.0.0/16)
+vi custom-resources.yaml
+```
+```bash
+kubectl create -f custom-resources.yaml
+
+#Wait till the pods are in running state
+kubectl get pods -n calico-system -w
+```
+```bash
+#Create Token to add nodes to k8s cluster
+kubeadm token create --print-join-command
+
+#Then join any number of worker nodes by running the join command on each worker node as root
+```
+
+
+
+
+
+
 
 
 
