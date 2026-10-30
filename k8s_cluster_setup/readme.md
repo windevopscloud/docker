@@ -693,6 +693,41 @@ curl --cacert ~/lab-certs/ca.crt -I -u admin:admin123 https://longhorn.192.168.1
 ---
 
 ### Installing K8s Dashboard (Headlamp)
+```bash
+helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
+helm repo update
+helm install headlamp headlamp/headlamp -n headlamp --create-namespace
+
+kubectl get svc,pods -n headlamp
+
+1. Get the application URL by running these commands:
+export POD_NAME=$(kubectl get pods --namespace headlamp -l "app.kubernetes.io/name=headlamp,app.kubernetes.io/instance=headlamp" -o jsonpath="{.items[0].metadata.name}")
+
+export CONTAINER_PORT=$(kubectl get pod --namespace headlamp $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+
+echo "Visit http://127.0.0.1:8080 to use your application"
+
+kubectl --namespace headlamp port-forward $POD_NAME 8080:$CONTAINER_PORT
+
+2. Get the token using
+kubectl create token headlamp --namespace headlamp
+  
+kubectl apply -f traefik_headlamp.yaml
+
+#Create Token
+kubectl create serviceaccount headlamp-admin -n headlamp
+#kubectl create clusterrolebinding headlamp-admin --clusterrole=cluster-admin --serviceaccount=headlamp:headlamp-admin
+kubectl get clusterrolebinding headlamp-admin -o yaml
+
+kubectl create clusterrolebinding headlamp-admin-lab --clusterrole=cluster-admin --serviceaccount=headlamp:headlamp-admin
+kubectl create token headlamp-admin -n headlamp --duration=24h
+kubectl auth can-i '*' '*' --as=system:serviceaccount:headlamp:headlamp
+kubectl auth can-i '*' '*' --as=system:serviceaccount:headlamp:headlamp-admin
+
+kubectl get pods -n headlamp
+kubectl get pods,svc -n traefik -o wide
+kubectl get ingress -n headlamp
+```
 
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
