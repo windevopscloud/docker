@@ -154,14 +154,14 @@ kubectl get nodes
 <pre>
 Your Kubernetes control-plane has initialized successfully!
 To start using your cluster, you need to run the following as a regular user:
-  mkdir -p \$HOME/.kube
-  sudo cp -i /etc/kubernetes/admin.conf \$HOME/.kube/config
-  sudo chown \$(id -u):(id -g) HOME/.kube/config
+    mkdir -p \$HOME/.kube
+    sudo cp -i /etc/kubernetes/admin.conf \$HOME/.kube/config
+    sudo chown \$(id -u):(id -g) HOME/.kube/config
 
 Nodes show NotReady until the CNI is installed.
-[root@localhost ~]# kubectl get nodes
-NAME         STATUS     ROLES           AGE     VERSION
-k8s-master   NotReady   control-plane   9m12s   v1.30.14
+    [root@localhost ~]# kubectl get nodes
+    NAME         STATUS     ROLES           AGE     VERSION
+    k8s-master   NotReady   control-plane   9m12s   v1.30.14
 </pre>
 
 ---
@@ -200,9 +200,9 @@ kubectl get nodes
 <pre>
 Your Kubernetes control-plane has initialized successfully!
 To start using your cluster, you need to run the following as a regular user:
-  mkdir -p $HOME/.kube
-  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+    mkdir -p $HOME/.kube
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
 </pre>
 
 
