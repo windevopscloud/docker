@@ -90,4 +90,89 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 ---
 
-### Installing MetalLB (Load Balancer)
+### Accessing console UI through Load Balancer (Routing Issue)
+<pre>
+Issue1: K8s console UI not loading when accessed through browser.
+
+Fix: Step by Step troubleshooting to identify and resolve the issue.
+</pre>
+```bash
+#From k8s Nodes; request to Load Balancer URL gives proper response
+echo | openssl s_client -connect 192.168.111.200:443 -servername console.192.168.111.200.nip.io 2>/dev/null | openssl x509 -noout -issuer
+curl -ik https://console.192.168.111.200.nip.io 2> /dev/null | grep -iw http
+```
+<pre>
+Why it failed: nobody owns 192.168.111.200 in BGP mode, so laptop got no answer and used the default network path.
+Laptop:
+    PS> Test-NetConnection 192.168.111.200 -Port 443
+    WARNING: TCP connect to (192.168.111.200 : 443) failed
+    WARNING: Ping to 192.168.111.200 failed with status: TimedOut
+    InterfaceAlias         : Wi-Fi            <<< left through Wi-Fi, not VMnet8
+    SourceAddress          : 192.168.8.34     <<< should be 192.168.111.1
+    TcpTestSucceeded       : False
+
+Find Interface Index
+    PS> arp -a | findstr 192.168.111
+    Interface: 192.168.111.1 --- 0x3
+    192.168.111.130       00-0c-29-c6-ce-8c     dynamic
+    192.168.111.131       00-0c-29-f5-a6-8e     dynamic
+    192.168.111.132       00-0c-29-00-6d-ae     dynamic
+    192.168.111.254       00-50-56-e8-3e-8a     dynamic
+    192.168.111.255       ff-ff-ff-ff-ff-ff     static
+
+Fix1: Add route
+    PS> route -p add 192.168.111.200 mask 255.255.255.255 192.168.111.130 metric 1 if 3
+
+    PS> Test-NetConnection 192.168.111.200 -Port 443
+    WARNING: TCP connect to (192.168.111.200 : 443) failed
+    WARNING: Ping to 192.168.111.200 failed with status: DestinationHostUnreachable
+    InterfaceAlias         : VMware Network Adapter VMnet8
+    SourceAddress          : 192.168.111.1
+    PingSucceeded          : False
+
+After adding route in Laptop, the network path is now corrected. Checking at Master Node (192.168.111.130) whether it have the route to reach 192.168.111.200
+
+Master Node:
+    [root@k8s-master ~] ip route get 192.168.111.200
+    192.168.111.200 dev ens160 src 192.168.111.130 uid 0        <<< no "via <worker>"
+
+    [root@k8s-master ~] vtysh -c "show ip bgp 192.168.111.200/32"
+    Paths: (2 available, no best path)                          <<< no best path
+    192.168.111.131 (inaccessible, import-check enabled) ...
+    Origin IGP, invalid, external                         <<< routes marked invalid
+
+    [root@k8s-master ~] vtysh -c "show ip nht"
+    192.168.111.131(Connected)
+    unresolved(Connected)                                      <<< can't resolve the next hop
+
+    [root@k8s-master ~] vtysh -c "show interface ens160"
+    inet 192.168.111.130/24 noprefixroute               <<< address added without a connected route
+
+    [root@k8s-master ~] vtysh -c "show ip route connected"
+    C>* 10.244.235.192/32 is directly connected, vxlan.calico   <<< no 192.168.111.0/24 entry
+
+Fix2: Tell FRR to accept neighbours without connected-route test
+    configure terminal
+    router bgp 64512
+        neighbor 192.168.111.131 disable-connected-check
+        neighbor 192.168.111.132 disable-connected-check
+    end
+    write memory
+
+    vtysh -c "show ip bgp"
+    ip route show 192.168.111.200
+    vtysh -c "show ip bgp summary"
+
+Even after adding neighbours, the Master’s own kube-proxy dropped the traffic. Traefik’s service used "externalTrafficPolicy: Local", which means only a node that runs a Traefik pod may handle this. The master has none, so its kube-proxy discarded the packets.
+
+Master Node:
+    [root@k8s-master ~] iptables-save | grep 192.168.111.200
+    -A KUBE-EXTERNAL-SERVICES -d 192.168.111.200/32 -p tcp ... "traefik/traefik:websecure has no local endpoints" ... --dport 443 -j DROP   <<< KEY
+    -A KUBE-EXTERNAL-SERVICES -d 192.168.111.200/32 -p tcp ... "traefik/traefik:web has no local endpoints" ... --dport 80 -j DROP
+
+    [root@k8s-master ~] nft list ruleset | grep 192.168.111.200
+    ip daddr 192.168.111.200  tcp dport 443 counter packets 15 bytes 780 drop   <<< 15 of your packets dropped here
+
+Fix 3: Update Traefik externalTrafficPolicy from Local to Cluster
+    helm upgrade traefik traefik/traefik -n traefik --reuse-values --set service.spec.externalTrafficPolicy=Cluster
+</pre>

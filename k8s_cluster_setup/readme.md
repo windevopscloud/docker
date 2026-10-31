@@ -583,6 +583,10 @@ kubectl apply -f traefik_cert.yaml
 #Updating Traefik to redirect http to https:
 helm show values traefik/traefik | grep -n -B2 -A6 redirections
 helm upgrade traefik traefik/traefik -n traefik --reuse-values --set ports.web.http.redirections.entryPoint.to=websecure --set ports.web.http.redirections.entryPoint.scheme=https
+
+#Check whether the issuer=CN=lab-ca, this confirms the TLSStore works.
+#If the issuer is “TRAEFIK DEFAULT CERT” means the TLSStore is not working.
+echo | openssl s_client -connect 192.168.111.200:443 2>/dev/null | openssl x509 -noout -issuer
 ```
 
 ---
@@ -764,6 +768,8 @@ kubectl get pods -n headlamp
 kubectl get pods,svc -n traefik -o wide
 kubectl get ingress -n headlamp
 ```
+
+
 
 ### Troubleshooting
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
