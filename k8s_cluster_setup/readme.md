@@ -236,6 +236,10 @@ Asymmetric return paths can cause trouble on a single subnet.
 FRR (Free Range Routing): Is open-source routing software for Linux. It turns an ordinary Linux machine into a router that speaks the same protocols as network gear from Cisco or Juniper.
 The Master Node runs FRR as the router (ASN 64512, port 1179).
 The MetalLB speakers on the Worker Node connect to it over BGP and say “I can deliver 192.168.111.200”. FRR puts those routes in the master’s kernel table, with maximum-paths 4 allowing it to use both workers at once (ECMP).
+
+![BGP Mode Diagram](./metallb_bgp_mode_components_ports.png)
+
+![L2 Mode Diagram](./metallb_l2_mode_components_ports.png)
 </pre>
 ```bash
 #Check the port 179 situation first, on the Master and Worker Nodes.
