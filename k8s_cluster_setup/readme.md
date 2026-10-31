@@ -239,11 +239,9 @@ The MetalLB speakers on the Worker Node connect to it over BGP and say “I can 
 </pre>
 
 MetalLB BGP mode
-
 <img src="./mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
 
 MetalLB L2 mode
-
 <img src="./metallb-l2-mode.png" alt="MetalLB L2 mode" width="700">
 
 ```bash
