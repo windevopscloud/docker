@@ -237,8 +237,9 @@ FRR (Free Range Routing): Is open-source routing software for Linux. It turns an
 The Master Node runs FRR as the router (ASN 64512, port 1179).
 The MetalLB speakers on the Worker Node connect to it over BGP and say “I can deliver 192.168.111.200”. FRR puts those routes in the master’s kernel table, with maximum-paths 4 allowing it to use both workers at once (ECMP).
 </pre>
-
-![BGP Mode Diagram](./metallb-bgp-mode.png)
+<img src="./mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
+<img src="./metallb-l2-mode.png" alt="MetalLB L2 mode" width="700">
+![BGP Mode Diagram](./mtallb-bgp-mode.png)
 ![L2 Mode Diagram](./metallb-l2-mode.png)
 
 ```bash
