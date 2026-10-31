@@ -1,0 +1,2 @@
+subjectAltName=DNS:*.192.168.111.200.nip.io
+extendedKeyUsage=serverAuth
