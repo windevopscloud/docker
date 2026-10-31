@@ -562,6 +562,18 @@ EOF
 openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 825 -sha256 -extfile ext.cnf
   
 kubectl create secret tls lab-tls -n traefik --cert=tls.crt --key=tls.key
+
+sudo tee ~/traefik_cert.yaml <<EOF
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: traefik
+spec:
+  defaultCertificate:
+    secretName: lab-tls
+EOF
+
 kubectl apply -f traefik_cert.yaml
 
 #Updating Traefik to redirect http to https:
@@ -700,18 +712,38 @@ helm install headlamp headlamp/headlamp -n headlamp --create-namespace
 
 kubectl get svc,pods -n headlamp
 
-1. Get the application URL by running these commands:
+#Optional: Get the application URL by running these commands:
 export POD_NAME=$(kubectl get pods --namespace headlamp -l "app.kubernetes.io/name=headlamp,app.kubernetes.io/instance=headlamp" -o jsonpath="{.items[0].metadata.name}")
-
 export CONTAINER_PORT=$(kubectl get pod --namespace headlamp $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
 
-echo "Visit http://127.0.0.1:8080 to use your application"
-
+kubectl create token headlamp --namespace headlamp
 kubectl --namespace headlamp port-forward $POD_NAME 8080:$CONTAINER_PORT
 
-2. Get the token using
-kubectl create token headlamp --namespace headlamp
-  
+#Configure Ingress
+sudo tee ~/traefik_longhorn.yaml <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: headlamp
+  namespace: headlamp
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: console.192.168.111.200.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: headlamp
+            port:
+              number: 80
+EOF
+
 kubectl apply -f traefik_headlamp.yaml
 
 #Create Token
