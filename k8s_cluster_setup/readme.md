@@ -632,7 +632,7 @@ helm repo update
 helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana_prometheus_values.yaml --set grafana.adminPassword='admin123'
 kubectl get pods -n monitoring -w
 ```
-```text
+<pre>
 Get Grafana 'admin' user password by running:
 kubectl --namespace monitoring get secrets monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
 
@@ -642,7 +642,7 @@ kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-s
 Access Grafana local instance:
 export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=monitoring" -oname)
 kubectl --namespace monitoring port-forward $POD_NAME 3000
-```
+</pre>
 
 ---
 
