@@ -240,8 +240,8 @@ One node answers ARP for the LoadBalancer IP, and all incoming traffic enters th
 Limits: one node’s network card carries all entry traffic, and failover takes a few seconds while another node takes over the ARP answer.
 </pre>
 
-<img src="./images/mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
-<img src="./images/metallb-l2-mode.png" alt="MetalLB L2 mode" width="700">
+<img src="./images/mtallb-bgp-mode.png" alt="MetalLB BGP mode">
+<img src="./images/metallb-l2-mode.png" alt="MetalLB L2 mode">
 
 ```bash
 #Check the port 179 situation first, on the Master and Worker Nodes.
@@ -292,6 +292,7 @@ sudo ss -ltnp | grep 1179
 #Firewall: All Nodes (Master, Worker1, Worker2), trust the node network and the pod network
 sudo firewall-cmd --permanent --zone=trusted --add-source=192.168.111.0/24
 sudo firewall-cmd --permanent --zone=trusted --add-source=10.244.0.0/16
+sudo firewall-cmd --permanent --zone=trusted --change-interface=ens160
 
 #Calico: BGP between nodes, VXLAN, Typha
 sudo firewall-cmd --permanent --add-port=179/tcp
@@ -328,7 +329,8 @@ helm install metallb metallb/metallb -n metallb-system --create-namespace --set 
 	  
 kubectl get pods -n metallb-system -w
 	
-#To see whether a pull is moving, check the Node(Master) the controller is on:
+#To see whether a pull is moving, check the Node the controller is on
+kubectl get pods -n metallb-system -o wide
 sudo ctr -n k8s.io images ls | grep metallb
 
 #Or pull manually on that Node (Master) and watch the progress:
@@ -339,16 +341,16 @@ kubectl get secret metallb-memberlist -n metallb-system
 #Once the controller and speakers are Running, wait about 30 seconds, then create the pool:
 sudo tee ~/metallb_pool.yaml <<EOF
 apiVersion: metallb.io/v1beta1
-  kind: IPAddressPool
-  metadata:
-    name: lab-pool
-    namespace: metallb-system
-  spec:
-    addresses:
-    - 192.168.111.200-192.168.111.220
+kind: IPAddressPool
+metadata:
+  name: lab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.111.200-192.168.111.220
 EOF
 
-kubectl -f apply metallb_pool.yaml
+kubectl apply -f metallb_pool.yaml
 kubectl get ipaddresspool -n metallb-system
 
 #Create the peer and advertisement
@@ -383,6 +385,7 @@ kubectl apply -f metallb_advertisement.yaml
 #Check the sessions
 sudo vtysh -c "show ip bgp summary"
 ```
+<img src="./images/frr_metallb_bgp.png" alt="FRR MetalLB BGP">
 
 ---
 
@@ -409,6 +412,7 @@ curl -i http://192.168.111.200
 
 kubectl logs -n metallb-system metallb-speaker-bj9k5 | grep -i announc
 ```
+<img src="./images/traefik_loadbalancer.png" alt="Traefik">
 
 ---
 
@@ -539,6 +543,7 @@ kubectl apply -f longhorn_verify_restore.yaml
 kubectl exec restore-pod -- ls /data/f2
 kubectl exec restore-pod -- cat /data/f2
 ```
+<img src="./images/longhorn_storage_backup.png" alt="Longhorn">
 
 ---
 
