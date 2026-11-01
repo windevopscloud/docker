@@ -16,6 +16,12 @@
 # Kubernetes Scheduling: Taints, Tolerations, & Node Affinity
 Reference guide for controlling where pods land across master and worker nodes using taints, tolerations, and node affinity rules.
 
+| Mechanism | Direction | Strength & Behavior |
+| :--- | :--- | :--- |
+| **Taint** | Repels pods away from a node | Pod requires a matching `toleration` |
+| **nodeSelector** | Pod chooses nodes by label | Hard, exact-match only |
+| **nodeAffinity** | Pod chooses nodes by label | Hard or soft rules with richer operators |
+
 ## 🛑 1. Taints and Tolerations
 Taints allow a node to **repel** a set of pods unless those pods explicitly have a matching toleration.
 
