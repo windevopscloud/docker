@@ -163,7 +163,7 @@ Nodes show NotReady until the CNI is installed.
     NAME         STATUS     ROLES           AGE     VERSION
     k8s-master   NotReady   control-plane   9m12s   v1.30.14
 </pre>
-<img src="./images/k8s_cluster.png" alt="MetalLB L2 mode" width="700">
+<img src="./images/k8s_cluster.png" alt="Kubernetes Cluster" width="700">
 
 ---
 
