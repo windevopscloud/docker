@@ -222,10 +222,6 @@ helm version
 <pre>
 We chose BGP Mode instead of the default L2 Mode, to learn and to get real load balancing at the entry point.
 
-Default mode: L2
-One node answers ARP for the LoadBalancer IP, and all incoming traffic enters through that node. kube-proxy then forwards it to a pod, possibly on another node. No router needed, and it works on any flat network.
-Limits: one node’s network card carries all entry traffic, and failover takes a few seconds while another node takes over the ARP answer.
-
 BGP Mode:
 Each Worker Node tells a router “send 192.168.111.200 to me”, and the router spreads traffic across all of them (ECMP). The load is balanced across Worker Nodes at the network level, there’s no single entry node, and a dead node’s route is withdrawn.
 The costs:
@@ -238,6 +234,10 @@ Asymmetric return paths can cause trouble on a single subnet.
 FRR (Free Range Routing): Is open-source routing software for Linux. It turns an ordinary Linux machine into a router that speaks the same protocols as network gear from Cisco or Juniper.
 The Master Node runs FRR as the router (ASN 64512, port 1179).
 The MetalLB speakers on the Worker Node connect to it over BGP and say “I can deliver 192.168.111.200”. FRR puts those routes in the master’s kernel table, with maximum-paths 4 allowing it to use both workers at once (ECMP).
+
+Default mode: L2
+One node answers ARP for the LoadBalancer IP, and all incoming traffic enters through that node. kube-proxy then forwards it to a pod, possibly on another node. No router needed, and it works on any flat network.
+Limits: one node’s network card carries all entry traffic, and failover takes a few seconds while another node takes over the ARP answer.
 </pre>
 
 <img src="./images/mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
