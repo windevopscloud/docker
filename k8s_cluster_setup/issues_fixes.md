@@ -90,13 +90,13 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 <pre>
 Issue1: K8s console UI not loading when accessed through browser.
 
-Fix: Step by Step troubleshooting to identify and resolve the issue.
-</pre>
-```bash
+Fix: Step by Step troubleshooting performed to identify and resolve multiple issues to achieve the final goal.
+
 #From k8s Nodes; request to Load Balancer URL gives proper response
 echo | openssl s_client -connect 192.168.111.200:443 -servername console.192.168.111.200.nip.io 2>/dev/null | openssl x509 -noout -issuer
 curl -ik https://console.192.168.111.200.nip.io 2> /dev/null | grep -iw http
-```
+</pre>
+
 <pre>
 Why it failed: nobody owns 192.168.111.200 in BGP mode, so laptop got no answer and used the default network path.
 Laptop:
