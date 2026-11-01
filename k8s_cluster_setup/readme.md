@@ -164,6 +164,7 @@ Nodes show NotReady until the CNI is installed.
     k8s-master   NotReady   control-plane   9m12s   v1.30.14
 </pre>
 
+<img src="./images/k8s_cluster.png" alt="MetalLB L2 mode" width="700">
 ---
 
 ### Installing Calico (CNI)
@@ -238,8 +239,8 @@ The Master Node runs FRR as the router (ASN 64512, port 1179).
 The MetalLB speakers on the Worker Node connect to it over BGP and say “I can deliver 192.168.111.200”. FRR puts those routes in the master’s kernel table, with maximum-paths 4 allowing it to use both workers at once (ECMP).
 </pre>
 
-<img src="./mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
-<img src="./metallb-l2-mode.png" alt="MetalLB L2 mode" width="700">
+<img src="./images/mtallb-bgp-mode.png" alt="MetalLB BGP mode" width="700">
+<img src="./images/metallb-l2-mode.png" alt="MetalLB L2 mode" width="700">
 
 ```bash
 #Check the port 179 situation first, on the Master and Worker Nodes.
