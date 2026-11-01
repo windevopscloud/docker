@@ -670,6 +670,7 @@ Access Grafana local instance:
 export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=monitoring" -oname)
 kubectl --namespace monitoring port-forward $POD_NAME 3000
 </pre>
+<img src="./images/prometheus_grafana.png" alt="Prometheus Grafana">
 
 ---
 
@@ -775,8 +776,9 @@ kubectl get pods -n headlamp
 kubectl get pods,svc -n traefik -o wide
 kubectl get ingress -n headlamp
 ```
+<img src="./images/headlamp.png" alt="Headlamp">
 
+---
 
-
-### Troubleshooting
+### Links
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
