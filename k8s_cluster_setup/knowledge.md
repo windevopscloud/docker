@@ -13,7 +13,7 @@
 * **Operator:** An advanced Custom Controller that embeds application-specific domain expertise. Instead of just maintaining pod counts, it handles complex application lifecycles like cluster bootstrapping, automated backups, and version migrations.
 * **Driver:** Interface implementation (such as CSI or CNI) that allows Kubernetes to manipulate low-level infrastructure directly—like mounting physical block storage or configuring host networking rules.
 
-# Kubernetes Scheduling: Taints, Tolerations, & Node Affinity
+# Kubernetes Scheduling: Taints, Tolerations, & Node Affinity, Anti Affinity
 Reference guide for controlling where pods land across master and worker nodes using taints, tolerations, and node affinity rules.
 
 | Mechanism | Direction | Strength & Behavior |
@@ -135,4 +135,51 @@ spec:
           - key: disktype
             operator: In
             values: ["ssd"]
+
+YAML
+spec:
+  #nodeSelector forces the pod to land *only* on nodes matching these exact labels
+  nodeSelector:
+    disktype: ssd 
+  containers:
+  - name: nginx-container
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+
+Deployment with Pod Anti-Affinity
+YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-app-deployment
+  labels:
+    app: secure-web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: secure-web
+  template:
+    metadata:
+      labels:
+        app: secure-web
+    spec:
+      affinity:
+        podAntiAffinity:
+          # Hard rule: Kubernetes will refuse to schedule pods on the same node
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - secure-web
+            topologyKey: "kubernetes.io/hostname"
+            #topologyKey: "kubernetes.io/hostname": This tells Kubernetes what boundary defines a "node". Every standard Kubernetes node has the built-in label kubernetes.io/hostname set to its unique node name. This ensures the anti-affinity check checks at the individual node level.
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
 </pre>
