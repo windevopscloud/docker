@@ -35,10 +35,98 @@ kubectl taint nodes k8s-worker1 dedicated=database:NoSchedule
 
 # Apply a maintenance taint with key-only and NoExecute effect
 kubectl taint nodes k8s-worker2 maintenance:NoExecute
-
+```
+<pre>
 Taint Effects Explained
 NoSchedule: New pods without a matching toleration cannot be scheduled on the node. Existing running pods remain unaffected.
 
 PreferNoSchedule: The scheduler tries to avoid the node, but will use it as a fallback if no other option exists.
 
 NoExecute: New pods are blocked, and any existing running pods without a matching toleration are immediately evicted.
+</pre>
+
+<pre>
+Basic Toleration (Equal)
+YAML
+spec:
+  tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "database"
+    effect: "NoSchedule"
+
+Control-Plane Toleration (Exists)
+YAML
+spec:
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+Complete Pod Manifest Targeting Control-Plane
+YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-master
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+  containers:
+  - name: nginx
+    image: nginx
+</pre>
+
+## 🧲 2. Node Affinity
+Node affinity functions like a more expressive, rule-based version of nodeSelector.
+<pre>
+Supported Types & Operators
+requiredDuringSchedulingIgnoredDuringExecution: Hard rule. If no matching node is found, the pod remains Pending. Supports operators: In, NotIn, Exists, DoesNotExist, Gt, Lt.
+
+preferredDuringSchedulingIgnoredDuringExecution: Soft rule. Uses weights (1-100) to prioritize matching nodes, but schedules elsewhere if unavailable.
+
+Hard Rule Example (Must run on Control-Plane)
+YAML
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+  tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+Negative Constraint Example (Avoid Control-Plane)
+YAML
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: DoesNotExist
+
+Soft Rule / Weighted Preference Example
+kubectl label node k8s-worker1 disktype=ssd
+
+YAML
+spec:
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 80
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values: ["ssd"]
+</pre>
