@@ -145,7 +145,7 @@ sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 ```
 
-7.Initialize Cluster: Bootstrap the Control Plane
+7. Initialize Cluster: Bootstrap the Control Plane
 ```bash
 systemctl enable kubelet.service
 sudo kubeadm init --apiserver-advertise-address=192.168.111.130 --pod-network-cidr=10.244.0.0/16
@@ -777,6 +777,217 @@ kubectl get pods,svc -n traefik -o wide
 kubectl get ingress -n headlamp
 ```
 <img src="./images/headlamp.png" alt="Headlamp">
+
+---
+
+### Installing Secrets Manager (External Secret Operator + Vault)
+1. Install Vault
+```bash
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm repo update
+helm install vault hashicorp/vault -n vault --create-namespace \
+  --set injector.enabled=false \
+  --set ui.enabled=true \
+  --set server.dataStorage.size=2Gi \
+  --set server.dataStorage.storageClass=longhorn
+kubectl get pods,pvc -n vault -w
+```
+Wait until the PVC is Bound and vault-0 shows 0/1 Running, which is expected while it’s sealed.
+
+2. Initialize and unseal
+```bash
+sudo dnf install -y jq
+kubectl exec -n vault vault-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json > ~/vault-init.json
+chmod 600 ~/vault-init.json
+kubectl exec -n vault vault-0 -- vault operator unseal "$(jq -r '.unseal_keys_b64[0]' ~/vault-init.json)"
+kubectl get pods -n vault
+```
+Copy ~/vault-init.json somewhere safe outside the cluster, because it holds the unseal key and root token.
+
+3. Enable the key-value store and save the first secret
+```bash
+TOKEN=$(jq -r .root_token ~/vault-init.json)
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault secrets enable -path=secret kv-v2
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv put secret/grafana admin-user=admin admin-password='<your-password>'
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv get secret/grafana
+```
+
+4. Install ESO
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+helm install external-secrets external-secrets/external-secrets -n external-secrets --create-namespace --set installCRDs=true
+kubectl get pods -n external-secrets
+kubectl api-resources | grep external-secrets.io
+```
+Wait until all pods are Running.
+The last command shows which API versions ESO supports.
+
+5. Let Vault accept Kubernetes logins
+```bash
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault auth enable kubernetes
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
+```
+
+6. Policy and role: read-only access to secret
+```bash
+cat > ~/eso-read.hcl <<'EOF'
+path "secret/data/*" {
+  capabilities = ["read"]
+}
+path "secret/metadata/*" {
+  capabilities = ["read", "list"]
+}
+EOF
+
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault policy write eso-read ~/eso-read.hcl
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault policy list
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault policy read eso-read
+
+#kubectl exec -i -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault policy write eso-read - <<EOF
+#path "secret/data/*" {
+#  capabilities = ["read"]
+#}
+#path "secret/metadata/*" {
+#  capabilities = ["read", "list"]
+#}
+#EOF
+
+#This ties the role eso to ESO’s own service account and gives it read-only access.
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault write auth/kubernetes/role/eso \
+  bound_service_account_names=external-secrets \
+  bound_service_account_namespaces=external-secrets \
+  policies=eso-read ttl=1h
+
+7. Connect ESO to Vault (ClusterSecretStore)
+```bash
+cat > ~/ClusterSecretStore.yaml <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "http://vault.vault.svc.cluster.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "eso"
+          serviceAccountRef:
+            name: "external-secrets"
+            namespace: "external-secrets"
+EOF
+
+kubectl apply -f ClusterSecretStore.yaml
+kubectl get clustersecretstore              #STATUS Valid (or READY True).
+
+cat > ~/grafana_externalsecret.yaml <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-admin
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: grafana-admin
+  data:
+  - secretKey: admin-user
+    remoteRef:
+      key: grafana
+      property: admin-user
+  - secretKey: admin-password
+    remoteRef:
+      key: grafana
+      property: admin-password
+EOF
+
+kubectl apply -f grafana_externalsecret.yaml
+kubectl get externalsecret -n monitoring
+
+#SecretSynced and the right password printed means the whole chain works: Vault, the login, the store, and ESO.
+kubectl get secret grafana-admin -n monitoring -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+8. Replace the hardcoded passwords
+#Grafana: point the chart at the new Secret.
+```bash
+helm upgrade monitoring prometheus-community/kube-prometheus-stack -n monitoring \
+  --set grafana.admin.existingSecret=grafana-admin \
+  --set grafana.admin.userKey=admin-user \
+  --set grafana.admin.passwordKey=admin-password
+
+kubectl delete secrets -n observability monitoring-grafana
+
+#Prometheus
+HASH="admin:$(openssl passwd -apr1 '<your-password>')"
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv put secret/prometheus-basic-auth users="$HASH"
+kubectl delete secret basic-auth-secret -n monitoring
+
+cat > ~/promotheus_externalsecret.yaml <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: basic-auth-secret
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: basic-auth-secret
+  data:
+  - secretKey: users
+    remoteRef:
+      key: prometheus-basic-auth
+      property: users
+EOF
+
+#Delete the hand-made secret first, because ESO won’t take over a Secret it didn’t create. Do the same for Longhorn in longhorn-system with its own key.
+
+HASH="admin:$(openssl passwd -apr1 '<your-password>')"
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv put secret/longhorn-basic-auth users="$HASH"
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv get secret/longhorn-basic-auth
+
+cat > ~/longhorn_externalsecret.yaml <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: basic-auth-secret
+  namespace: longhorn-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: basic-auth-secret
+  data:
+  - secretKey: users
+    remoteRef:
+      key: longhorn-basic-auth
+      property: users
+EOF
+
+kubectl apply -f longhorn_externalsecret.yaml
+kubectl get externalsecret -n longhorn-system          # SecretSynced
+
+#After Node reboot, ensure to unseal the vault and external secret and secret store status is sync
+kubectl get pods -n vault
+./vault-unseal.sh
+kubectl get externalsecret -A
+kubectl get clustersecretstore -A
+
+kubectl annotate externalsecret basic-auth-secret -n longhorn-system force-sync=$(date +%s) --overwrite
+kubectl annotate externalsecret basic-auth-secret -n monitoring force-sync=$(date +%s) --overwrite
+kubectl annotate externalsecret grafana-admin -n monitoring force-sync=$(date +%s) --overwrite
+```
 
 ---
 
