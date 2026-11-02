@@ -876,7 +876,7 @@ kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault write auth/kuberne
 
 7. Connect ESO to Vault (ClusterSecretStore)
 ```bash
-cat > ~/ClusterSecretStore.yaml <<'EOF'
+cat > ~/clustersecretstore.yaml <<'EOF'
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
@@ -896,7 +896,7 @@ spec:
             namespace: "external-secrets"
 EOF
 
-kubectl apply -f ClusterSecretStore.yaml
+kubectl apply -f clustersecretstore.yaml
 kubectl get clustersecretstore              #STATUS Valid (or READY True).
 
 cat > ~/grafana_externalsecret.yaml <<'EOF'
@@ -1003,6 +1003,7 @@ kubectl annotate externalsecret basic-auth-secret -n longhorn-system force-sync=
 kubectl annotate externalsecret basic-auth-secret -n monitoring force-sync=$(date +%s) --overwrite
 kubectl annotate externalsecret grafana-admin -n monitoring force-sync=$(date +%s) --overwrite
 ```
+<img src="./images/vault_eso_secret_flow.png" alt="ESO Vault Secret">
 
 ---
 
