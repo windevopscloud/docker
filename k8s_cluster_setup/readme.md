@@ -842,6 +842,8 @@ The last command shows which API versions ESO supports.
 ```bash
 kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault auth enable kubernetes
 kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
+kubectl exec -n vault vault-0 -- env | grep KUBERNETES_PORT_443_TCP_ADDR
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault read auth/kubernetes/config
 ```
 
 6. Policy and role: read-only access to secret
@@ -873,6 +875,12 @@ kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault write auth/kuberne
   bound_service_account_names=external-secrets \
   bound_service_account_namespaces=external-secrets \
   policies=eso-read ttl=1h
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault read auth/kubernetes/role/eso
+
+#Get all SA and assocaited pods
+kubectl get sa --all-namespaces
+kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.spec.serviceAccountName}{"\n"}{end}' | grep external-secrets
+kubectl get clusterrolebindings,rolebindings --all-namespaces
 
 7. Connect ESO to Vault (ClusterSecretStore)
 ```bash
@@ -993,7 +1001,7 @@ EOF
 kubectl apply -f longhorn_externalsecret.yaml
 kubectl get externalsecret -n longhorn-system          # SecretSynced
 
-#After Node reboot, ensure to unseal the vault and external secret and secret store status is sync
+#After Node reboot, ensure to unseal the vault and externalsecret and secretstore status is sync
 kubectl get pods -n vault
 ./vault-unseal.sh
 kubectl get externalsecret -A
