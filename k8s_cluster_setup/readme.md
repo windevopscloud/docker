@@ -213,7 +213,22 @@ To start using your cluster, you need to run the following as a regular user:
 ```bash
 sudo dnf install -y git
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
 helm version
+helm repo list                                  # your repo aliases
+
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f monitoring-values.yaml
+helm upgrade monitoring prometheus-community/kube-prometheus-stack -n monitoring -f grafana_prometheus_values1.yaml
+
+helm list -A
+helm search repo prometheus-community                          # charts in that repo
+helm show chart prometheus-community/kube-prometheus-stack     # version, description, subcharts
+helm show readme prometheus-community/kube-prometheus-stack    # the chart's documentation
+
+helm get values monitoring -n monitoring
+helm get values monitoring -n monitoring -a     # values your installed release is actually using
+helm get values monitoring -n monitoring | grep -i -E 'password|existingSecret'
+helm get values monitoring -n monitoring | grep -i password
 ```
 
 ---
