@@ -1,0 +1,45 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: demo-secret
+  namespace: default
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: demo-secret
+  data:
+  - secretKey: password
+    remoteRef:
+      key: demo
+      property: password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      containers:
+      - name: c
+        image: busybox
+        command: ["sh","-c","echo password=$DEMO_PASSWORD; sleep 3600"]
+        env:
+        - name: DEMO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: demo-secret
+              key: password
