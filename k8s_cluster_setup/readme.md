@@ -1015,5 +1015,100 @@ kubectl annotate externalsecret grafana-admin -n monitoring force-sync=$(date +%
 
 ---
 
+### Installing Stakater (Reloader)
+Reloader watches Secrets and ConfigMaps, and when one changes it does a rolling restart of the Deployments that use it. It’s the last link in the Vault, ESO, pod chain. Run everything on the master.
+
+1. Install
+```bash
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+helm install reloader stakater/reloader -n reloader --create-namespace
+kubectl get pods -n reloader
+```
+
+2. How to tell it which Deployments to watch
+Add one annotation to the Deployment’s own metadata (not the pod template):
+
+yaml
+metadata:
+  annotations:
+    reloader.stakater.com/auto: "true"
+
+Auto restarts the Deployment when any Secret or ConfigMap it uses change. To watch one specific Secret instead, use secret.reloader.stakater.com/reload: "<secret_name>", so an unrelated ConfigMap change doesn’t trigger a restart.
+
+3. Verify
+```bash
+TOKEN=$(jq -r .root_token ~/vault-init.json)
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv put secret/demo password=one
+
+cat > ~/stakater_verify_app.yaml <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: demo-secret
+  namespace: default
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: demo-secret
+  data:
+  - secretKey: password
+    remoteRef:
+      key: demo
+      property: password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      containers:
+      - name: c
+        image: busybox
+        command: ["sh","-c","echo password=$DEMO_PASSWORD; sleep 3600"]
+        env:
+        - name: DEMO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: demo-secret
+              key: password
+EOF
+
+kubectl apply -f stakater_verify_app.yaml
+kubectl get externalsecret demo-secret
+
+#The log should print password=one.
+kubectl logs deploy/demo
+
+#Now change the value in Vault, as a rotation would, and watch the restart:
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv put secret/demo password=two
+kubectl annotate externalsecret demo-secret force-sync=$(date +%s) --overwrite
+kubectl get pods -l app=demo -w
+
+#Reloader should replace the pods one at a time within a few seconds of the Secret changing. Then it should print password=two
+kubectl logs deploy/demo
+```
+
+4. Clean up the test
+```bash
+kubctl delete -f stakater_verify_app.yaml
+kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv metadata delete secret/demo
+```
+
 ### Links
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
