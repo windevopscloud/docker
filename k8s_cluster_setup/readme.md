@@ -1110,5 +1110,12 @@ kubctl delete -f stakater_verify_app.yaml
 kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv metadata delete secret/demo
 ```
 
+---
+
+### Installing Velero (K8s cluster configuration backup)
+
+
+---
+
 ### Links
 Issues faced while performing the setup and their respective fixes are documented in [`issues_fixes.md`](issues_fixes.md).
