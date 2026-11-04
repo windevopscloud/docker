@@ -1,4 +1,4 @@
-1. Implement ingress controller using Traefik.
+1. Implement Traefik CRD, and ingress controller.
 ```bash
 kubectl apply -f kubernetes-crd-definition-v1.yml
 kubectl apply -f ic-traefik-hn_update1.yaml
