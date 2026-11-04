@@ -1113,7 +1113,224 @@ kubectl exec -n vault vault-0 -- env VAULT_TOKEN=$TOKEN vault kv metadata delete
 ---
 
 ### Installing Velero (K8s cluster configuration backup)
+Velero stores its backups in S3-style object storage, and it can’t use NFS. So we need a small S3 target first, kept outside the cluster to survive cluster failure scenarios.
 
+1. Garage on the master (S3 target). 
+```bash
+sudo dnf install -y podman                         #Install Podman
+sudo mkdir -p /srv/garage/meta /srv/garage/data
+
+sudo tee /srv/garage/garage.toml <<EOF
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "$(openssl rand -hex 32)"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "$(openssl rand -base64 32)"
+EOF
+
+sudo chmod 600 /srv/garage/garage.toml
+```
+
+```bash
+# Update <tag> with Latest Image tag
+sudo tee /etc/containers/systemd/garage.container <<'EOF'
+[Unit]
+Description=Garage S3 storage
+
+[Container]
+Image=docker.io/dxflrs/garage:<tag>
+ContainerName=garage
+PublishPort=3900:3900
+PublishPort=3901:3901
+PublishPort=3903:3903
+Volume=/srv/garage/garage.toml:/etc/garage.toml:Z
+Volume=/srv/garage/meta:/var/lib/garage/meta:Z
+Volume=/srv/garage/data:/var/lib/garage/data:Z
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl start garage
+sudo podman logs garage | tail
+```
+
+2. Create the bucket and an access key
+```bash
+alias garage='sudo podman exec garage /garage'
+garage status                                   # note the node ID
+garage layout assign -z dc1 -c 20G <node-id>    #Update the node-id with the value from above
+garage layout apply --version 1
+garage bucket create velero
+garage key create velero-key                    #prints the key ID and secret: copy both now
+garage bucket allow --read --write --owner velero --key velero-key
+
+#Make sure df -h /srv has the 20G available.
+#The workers must reach 192.168.111.130:3900
+sudo firewall-cmd --permanent --add-port=3900/tcp && sudo firewall-cmd --reload
+```
+
+3. Give Velero its credentials (no password in a values file)
+```bash
+garage key info velero-key --show-secret        #Keep the key somewhere safe
+cat > ~/credentials-velero <<'EOF'
+[default]
+aws_access_key_id=<key id>
+aws_secret_access_key=<secret>
+EOF
+
+chmod 600 ~/credentials-velero
+kubectl create namespace velero
+kubectl create secret generic velero-credentials -n velero --from-file=cloud=$HOME/credentials-velero
+shred -u ~/credentials-velero
+```
+
+4. Install Velero with Helm
+```bash
+helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+helm repo update
+helm search repo vmware-tanzu/velero --versions | head -5
+helm show values vmware-tanzu/velero | grep -n -E 'existingSecret|snapshotsEnabled|deployNodeAgent|backupStorageLocation'
+
+cat > ~/velero-values.yaml << 'EOF'
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.2
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: velero
+      config:
+        region: garage
+        s3ForcePathStyle: "true"
+        s3Url: http://192.168.111.130:3900
+credentials:
+  useSecret: true
+  existingSecret: velero-credentials
+snapshotsEnabled: false
+deployNodeAgent: false
+EOF
+
+helm install velero vmware-tanzu/velero -n velero -f ~/velero-values.yaml --version 12.2.3
+kubectl get pods -n velero
+```
+
+5. Install the Velero CLI (same version as the server)
+```bash
+curl -LO https://github.com/vmware-tanzu/velero/releases/download/v1.18.2/velero-v1.18.2-linux-amd64.tar.gz
+tar -xzf velero-v1.18.2-linux-amd64.tar.gz
+sudo mv velero-v1.18.2-linux-amd64/velero /usr/local/bin/
+velero version
+velero backup-location get
+```
+
+6. Test: back up, delete, restore
+```bash
+cat > ~velero_verify_app.sh << 'EOF'
+#Create
+kubectl create namespace velero-test
+kubectl create deployment web -n velero-test --image=nginx
+kubectl create configmap demo -n velero-test --from-literal=hello=world
+
+#Delete
+#kubectl delete namespace velero-test
+EOF
+
+chmod 755 velero_verify_app.sh
+./velero_verify_app.sh
+
+velero backup create test-backup --include-namespaces velero-test --wait
+velero backup describe test-backup
+kubectl delete namespace velero-test
+velero restore create --from-backup test-backup --wait
+kubectl get all,cm -n velero-test
+
+#Everything backed up should get restored. Then perform the cleanup. 
+kubectl delete namespace velero-test
+```
+
+7. A schedule with expiry (7 days)
+```bash
+velero schedule create daily-all --schedule="0 2 * * *" --ttl 168h --exclude-namespaces kube-system,kube-public,velero
+velero schedule get
+```
+
+<pre>
+Things to know:
+Backups contain your Secrets (base64 only), so protect the Garage bucket and its key like the Vault init file.
+The backup target lives on the master. If the master VM is lost, so are the backups.
+Copy /srv/garage somewhere else, or put Garage on another machine.
+Restoring a PVC with Velero creates the claim but not the data.
+After a reboot, check that "systemctl status garage" is active and "velero backup-location get" says Available.
+</pre>
+
+```bash
+Few commands for troubleshooting:
+sudo journalctl -xeu garage.service --no-pager | tail -30
+sudo systemctl status garage.service --no-pager | head -15
+sudo systemctl daemon-reload
+sudo systemctl restart garage
+sudo systemctl status garage --no-pager | head -8
+sudo podman ps
+sudo podman logs garage
+garage bucket list
+garage bucket info velero
+velero backup get
+curl --aws-sigv4 "aws:amz:garage:s3" --user "<key id>:<secret>" http://192.168.111.130:3900/velero/
+#Make sure the worker nodes can reach it too
+curl -s -o /dev/null -w "%{http_code}\n" http://192.168.111.130:3900
+```
+
+8. Web UI for garage
+Garage Web UI is a small container that shows buckets, keys, objects and the cluster layout. Garage’s admin port (3903) and S3 API port (3900)
+```bash
+sudo tee /etc/containers/systemd/garage-webui.container <<'EOF'
+[Unit]
+Description=Garage Web UI
+
+[Container]
+Image=docker.io/khairul169/garage-webui:latest
+ContainerName=garage-webui
+PublishPort=3909:3909
+Volume=/srv/garage/garage.toml:/etc/garage.toml:ro,Z
+Environment=API_BASE_URL=http://192.168.111.130:3903
+Environment=S3_ENDPOINT_URL=http://192.168.111.130:3900
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl start garage-webui
+sudo podman ps
+
+#Then access http://192.168.111.130:3909 through browser.
+#It has full admin rights through Garage’s admin token, It reads garage.toml, which holds the tokens, so leave the mount read-only as above.
+
+#The garage.toml line should say rw=false.
+sudo podman inspect garage-webui --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} rw={{.RW}}{{"\n"}}{{end}}'
+```
 
 ---
 
